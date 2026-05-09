@@ -1,0 +1,19 @@
+node_modules/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+
+# Vite build output
+ui/dist/
+
+# Editor-local state — sessions, audit log, lock files
+data/editor.db
+data/editor.db-journal
+data/editor.db-shm
+data/editor.db-wal
+data/locks/
+
+.DS_Store
+.idea/
+.vscode/

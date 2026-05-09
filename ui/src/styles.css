@@ -1,0 +1,34 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens. Used as `bg-bg`, `text-fg`, `border-border`, `text-accent`,
+ * etc. via the `@theme` block below.
+ */
+@theme {
+	--color-bg: #0e1116;
+	--color-bg-2: #161b22;
+	--color-bg-3: #1f2630;
+	--color-border: #2a313c;
+	--color-fg: #e7ebf0;
+	--color-muted: #8a93a1;
+	--color-accent: #5469ff;
+	--color-accent-hover: #7186ff;
+	--color-ok: #36c98c;
+	--color-warn: #f0a020;
+	--color-err: #ef5350;
+	--color-code: #f4dbb5;
+	--font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+html, body, #root {
+	height: 100%;
+}
+
+body {
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
+	color-scheme: dark;
+}
+
+code, .mono {
+	font-family: var(--font-mono);
+}
