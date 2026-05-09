@@ -4,6 +4,12 @@ node_modules/
 .env.*
 !.env.example
 
+# Defeat the "lib/" entry that some global ~/.gitignore_global files
+# carry (intended for Python venvs / Node build output). The editor
+# uses src/lib/ and ui/src/lib/ as source directories — they MUST ship.
+!src/lib/
+!ui/src/lib/
+
 # Vite build output
 ui/dist/
 
