@@ -14,6 +14,12 @@ set -euo pipefail
 # `bun` and `pm2` resolve regardless of how this script was invoked.
 export PATH="$HOME/.bun/bin:$HOME/.local/bin:/usr/local/bin:$PATH"
 
+# Keep the host's Bun current. Lockfiles are written by recent Bun in dev
+# and CI; an older host Bun fails the frozen-install ("lockfile had
+# changes, but lockfile is frozen"). `bun upgrade` is idempotent and
+# safe when already current.
+bun upgrade
+
 # Install everything (incl. devDeps) — Vite + tsc need them at build time.
 bun install --frozen-lockfile
 
