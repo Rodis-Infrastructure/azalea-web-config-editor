@@ -53,6 +53,12 @@ export const env = {
 			.map(id => id.trim())
 			.filter(Boolean)
 	),
+	/**
+	 * Optional Discord webhook URL. When set, every successful save or
+	 * restore posts an embed describing who changed what. When unset,
+	 * the post is silently skipped — the feature is fully opt-in.
+	 */
+	changeWebhookUrl: readString("CHANGE_WEBHOOK_URL"),
 	// Derive cookie security from the OAuth redirect URI: HTTPS deploys get
 	// `Secure` on every cookie, plain-HTTP local dev does not (otherwise the
 	// browser refuses to send cookies back over the unencrypted callback).

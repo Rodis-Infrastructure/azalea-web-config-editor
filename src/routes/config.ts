@@ -12,6 +12,7 @@ import { guildAuthMiddleware, type GuildAuthEnv } from "@/middleware/guildAuth";
 import { listBackups, readBackup, readConfigFile, validateConfigYaml } from "@lib/config";
 import { saveGuildConfig, tailPm2Logs } from "@lib/save";
 import { recordAuditEvent } from "@lib/audit";
+import { hashYaml, notifyConfigChange } from "@lib/webhook";
 
 export const configRoutes = new Hono<GuildAuthEnv>()
 	.use("*", sessionMiddleware, guildAuthMiddleware);
@@ -67,6 +68,17 @@ configRoutes.post("/", async c => {
 		errorMessage: success ? undefined : describeOutcome(outcome)
 	});
 
+	if (success) {
+		// Fire-and-forget — webhook latency must not block the response.
+		void notifyConfigChange({
+			action: "save",
+			guildId,
+			username: session.username,
+			beforeHash: hashYaml(before?.yamlText ?? null),
+			afterHash: hashYaml(body.yaml)!
+		});
+	}
+
 	if (outcome.status === "degraded") {
 		const logs = await tailPm2Logs(200);
 		return c.json({ ...outcome, logs }, 500);
@@ -112,6 +124,16 @@ configRoutes.post("/restore", async c => {
 		success: outcome.status === "saved",
 		errorMessage: outcome.status === "saved" ? undefined : describeOutcome(outcome)
 	});
+
+	if (outcome.status === "saved") {
+		void notifyConfigChange({
+			action: "restore",
+			guildId,
+			username: session.username,
+			beforeHash: hashYaml(before?.yamlText ?? null),
+			afterHash: hashYaml(yaml)!
+		});
+	}
 
 	return c.json(outcome);
 });
