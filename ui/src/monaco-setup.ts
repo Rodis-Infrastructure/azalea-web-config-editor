@@ -1,9 +1,11 @@
-// Self-host Monaco so `@monaco-editor/react` doesn't fetch from
-// cdn.jsdelivr.net at runtime. Importing the full `monaco-editor`
-// package pulls in every Monarch language (~30 of them, ~3 MB
-// post-minify). We use one language — YAML — so we import the core
-// editor API and only the YAML basic-language contribution.
+// Self-host Monaco. `editor.api` alone is just the surface API; the
+// `editor.all` import wires up the controllers Monaco needs at runtime
+// (CodeLens, hover, find, suggestions, etc.) — without it,
+// `registerCodeLensProvider` registers a provider with nothing to
+// consume it and the lens never renders. We still skip Monaco's
+// ~30 bundled languages, only registering YAML.
 import * as monaco from "monaco-editor/esm/vs/editor/editor.api";
+import "monaco-editor/esm/vs/editor/editor.all";
 import "monaco-editor/esm/vs/basic-languages/yaml/yaml.contribution";
 import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import { loader } from "@monaco-editor/react";
