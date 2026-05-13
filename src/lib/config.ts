@@ -30,6 +30,49 @@ export function configPath(guildId: string): string {
 	return resolve(env.configsDir, `${guildId}.yml`);
 }
 
+/**
+ * Sidecar tracking who last saved the live config. Written alongside the
+ * `.yml` on every successful save and copied into the backup directory when
+ * we rotate the file, so backups can name their author without joining
+ * against the audit log.
+ */
+export interface BackupAuthor {
+	userId: string;
+	username: string;
+	savedAt: number;
+}
+
+function authorSidecarPath(guildId: string): string {
+	return resolve(env.configsDir, ".authors", `${guildId}.json`);
+}
+
+function readAuthor(path: string): BackupAuthor | null {
+	if (!existsSync(path)) return null;
+	try {
+		const parsed = JSON.parse(readFileSync(path, "utf8")) as Partial<BackupAuthor>;
+		if (typeof parsed.userId !== "string" || typeof parsed.username !== "string") return null;
+		return {
+			userId: parsed.userId,
+			username: parsed.username,
+			savedAt: typeof parsed.savedAt === "number" ? parsed.savedAt : 0
+		};
+	} catch {
+		return null;
+	}
+}
+
+export function readCurrentAuthor(guildId: string): BackupAuthor | null {
+	return readAuthor(authorSidecarPath(guildId));
+}
+
+export function writeCurrentAuthor(guildId: string, author: BackupAuthor): void {
+	const path = authorSidecarPath(guildId);
+	mkdirSync(resolve(path, ".."), { recursive: true });
+	const tmp = `${path}.tmp`;
+	writeFileSync(tmp, JSON.stringify(author), "utf8");
+	renameSync(tmp, path);
+}
+
 /** List the guild IDs that currently have a config file on disk. */
 export function listGuildIds(): string[] {
 	if (!existsSync(env.configsDir)) return [];
@@ -85,6 +128,13 @@ export function backupConfigFile(guildId: string): string | null {
 	const backupPath = join(dir, `${stamp}.yml`);
 	writeFileSync(backupPath, readFileSync(path, "utf8"), "utf8");
 
+	// Capture the author of the content we just snapshotted so the editor can
+	// display "saved by X" against each backup.
+	const author = readCurrentAuthor(guildId);
+	if (author) {
+		writeFileSync(join(dir, `${stamp}.author.json`), JSON.stringify(author), "utf8");
+	}
+
 	rotate(dir);
 	return backupPath;
 }
@@ -100,6 +150,13 @@ function rotate(dir: string): void {
 			renameSync(entry.path, `${entry.path}.deleted`);
 			// Best-effort delete; if it fails we just leave the .deleted file.
 			Bun.file(`${entry.path}.deleted`).delete().catch(() => undefined);
+			// Best-effort cleanup of the matching author sidecar.
+			const stamp = entry.name.replace(/\.yml$/, "");
+			const sidecar = join(dir, `${stamp}.author.json`);
+			if (existsSync(sidecar)) {
+				try { Bun.file(sidecar).delete().catch(() => undefined); }
+				catch { /* ignore */ }
+			}
 		} catch {
 			// Ignore rotation failures — they don't affect correctness of the save.
 		}
@@ -107,17 +164,21 @@ function rotate(dir: string): void {
 }
 
 /** List the available backups for a guild, newest first. */
-export function listBackups(guildId: string): { stamp: string; path: string }[] {
+export function listBackups(guildId: string): { stamp: string; path: string; author: BackupAuthor | null }[] {
 	const dir = join(env.backupsDir, guildId);
 	if (!existsSync(dir)) return [];
 
 	return readdirSync(dir)
 		.filter(name => name.endsWith(".yml"))
 		.sort((a, b) => b.localeCompare(a))
-		.map(name => ({
-			stamp: name.replace(/\.yml$/, ""),
-			path: join(dir, name)
-		}));
+		.map(name => {
+			const stamp = name.replace(/\.yml$/, "");
+			return {
+				stamp,
+				path: join(dir, name),
+				author: readAuthor(join(dir, `${stamp}.author.json`))
+			};
+		});
 }
 
 /** Read a specific backup file's contents by timestamp. */

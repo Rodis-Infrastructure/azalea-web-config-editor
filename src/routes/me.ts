@@ -13,6 +13,7 @@ import { fetchGuild } from "@lib/discord";
 import { listGuildIds, readConfigFile, validateConfigYaml } from "@lib/config";
 import type { RawGuildConfig } from "@/schema";
 import { sessionMiddleware, requireSession, type SessionEnv } from "@/middleware/session";
+import { env } from "@lib/env";
 
 interface ManageableGuild {
 	id: string;
@@ -52,6 +53,7 @@ meRoutes.get("/", async c => {
 	return c.json({
 		userId: session.userId,
 		username: session.username,
-		manageableGuilds: manageable
+		manageableGuilds: manageable,
+		testWebhookConfigured: env.testWebhookUrl !== ""
 	});
 });

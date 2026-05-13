@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
-import { api, type AuditEvent, type ConfigPayload, type DiscordChannel, type DiscordRole, type Me, type SaveOutcome, type ValidationResult } from "../../lib/api";
+import { api, type AuditEvent, type BackupSummary, type ConfigPayload, type DiscordChannel, type DiscordRole, type Me, type SaveOutcome, type ValidationResult } from "../../lib/api";
 import { fmtTimestamp } from "../../lib/format";
 import { RawYamlTab } from "./RawYamlTab";
 import { BackupsPanel } from "./BackupsPanel";
@@ -30,7 +30,7 @@ export function EditorPage({ me }: { me: Me }): JSX.Element {
 	const [parse, setParse] = useState<ValidationResult | null>(null);
 	const [status, setStatus] = useState<SaveStatus>({ tone: "info", message: "Loading…" });
 	const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
-	const [backups, setBackups] = useState<{ stamp: string }[]>([]);
+	const [backups, setBackups] = useState<BackupSummary[]>([]);
 	const [channels, setChannels] = useState<DiscordChannel[] | null>(null);
 	const [roles, setRoles] = useState<DiscordRole[] | null>(null);
 	const [saving, setSaving] = useState(false);
@@ -41,17 +41,20 @@ export function EditorPage({ me }: { me: Me }): JSX.Element {
 	}, [guildId]);
 
 	const refreshBackups = useCallback(async () => {
-		const res = await api<{ backups: { stamp: string }[] }>(`/api/guilds/${guildId}/config/backups`);
+		const res = await api<{ backups: BackupSummary[] }>(`/api/guilds/${guildId}/config/backups`);
 		if (res.ok) setBackups(res.body.backups);
 	}, [guildId]);
 
+	const [lookupRefreshing, setLookupRefreshing] = useState(false);
 	const refreshLookup = useCallback(async () => {
+		setLookupRefreshing(true);
 		const [c, r] = await Promise.all([
 			api<DiscordChannel[]>(`/api/guilds/${guildId}/discord/channels`),
 			api<DiscordRole[]>(`/api/guilds/${guildId}/discord/roles`)
 		]);
 		if (c.ok) setChannels(c.body);
 		if (r.ok) setRoles(r.body);
+		setLookupRefreshing(false);
 	}, [guildId]);
 
 	useEffect(() => {
@@ -224,7 +227,14 @@ export function EditorPage({ me }: { me: Me }): JSX.Element {
 
 			<div className="grid grid-cols-[1fr_320px] gap-4 flex-1 min-h-0">
 				<div className="min-w-0 min-h-0 h-full">
-					<RawYamlTab value={yaml} onChange={setYaml} parse={parse} />
+					<RawYamlTab
+						value={yaml}
+						onChange={setYaml}
+						parse={parse}
+						guildId={guildId}
+						testEmbedEnabled={me.testWebhookConfigured}
+						onStatus={setStatus}
+					/>
 				</div>
 
 				<aside className="flex flex-col gap-3 overflow-y-auto pr-1">
@@ -234,7 +244,21 @@ export function EditorPage({ me }: { me: Me }): JSX.Element {
 					<Panel title="Validation">
 						<ValidationPanel parse={parse} />
 					</Panel>
-					<Panel title="Server lookup">
+					<Panel
+						title="Server lookup"
+						action={
+							<button
+								type="button"
+								onClick={refreshLookup}
+								disabled={lookupRefreshing}
+								className="text-[10px] uppercase tracking-wider text-muted hover:text-fg disabled:opacity-40 cursor-pointer flex items-center gap-1"
+								title="Refetch channels and roles from Discord"
+							>
+								<RefreshIcon spinning={lookupRefreshing} />
+								<span>{lookupRefreshing ? "Refreshing" : "Refresh"}</span>
+							</button>
+						}
+					>
 						<LookupPanel channels={channels} roles={roles} />
 					</Panel>
 					<Panel title="Backups">
@@ -249,11 +273,35 @@ export function EditorPage({ me }: { me: Me }): JSX.Element {
 	);
 }
 
-function Panel({ title, children }: { title: string; children: React.ReactNode }): JSX.Element {
+function Panel({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }): JSX.Element {
 	return (
 		<section className="bg-bg-2 border border-border rounded-md p-3">
-			<h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted mb-2">{title}</h3>
+			<div className="flex items-center justify-between mb-2">
+				<h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted">{title}</h3>
+				{action}
+			</div>
 			{children}
 		</section>
+	);
+}
+
+function RefreshIcon({ spinning }: { spinning: boolean }): JSX.Element {
+	return (
+		<svg
+			width="11"
+			height="11"
+			viewBox="0 0 16 16"
+			className={spinning ? "animate-spin" : ""}
+			aria-hidden
+		>
+			<path
+				d="M13.5 8a5.5 5.5 0 1 1-1.61-3.89M13.5 3v3h-3"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="1.6"
+				strokeLinecap="round"
+				strokeLinejoin="round"
+			/>
+		</svg>
 	);
 }

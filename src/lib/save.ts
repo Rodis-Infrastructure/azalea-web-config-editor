@@ -26,7 +26,8 @@ import {
 	configPath,
 	readConfigFile,
 	validateConfigYaml,
-	writeConfigFileAtomic
+	writeConfigFileAtomic,
+	writeCurrentAuthor
 } from "@lib/config";
 
 const HEALTH_TIMEOUT_MS = 30_000;
@@ -44,6 +45,11 @@ export interface SaveInput {
 	/** Optional optimistic-concurrency token. If supplied, the save aborts when
 	 *  the on-disk mtime differs (another editor saved in between). */
 	expectedMtimeMs?: number;
+	/**
+	 * Who is saving. Persisted in a sidecar so future backups can name the
+	 * author of the snapshot they replaced.
+	 */
+	actor?: { userId: string; username: string };
 }
 
 export async function saveGuildConfig(input: SaveInput): Promise<SaveOutcome> {
@@ -70,7 +76,16 @@ export async function saveGuildConfig(input: SaveInput): Promise<SaveOutcome> {
 		// 4. Atomic write.
 		writeConfigFileAtomic(input.guildId, input.yamlText);
 
-		// 5. Reload + verify.
+		// 5. Record current author so the next backup knows who saved this one.
+		if (input.actor) {
+			writeCurrentAuthor(input.guildId, {
+				userId: input.actor.userId,
+				username: input.actor.username,
+				savedAt: Date.now()
+			});
+		}
+
+		// 6. Reload + verify.
 		return withLock("pm2-reload", () => reloadAndVerify(input.guildId, backupPath));
 	});
 }

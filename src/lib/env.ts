@@ -59,6 +59,12 @@ export const env = {
 	 * the post is silently skipped — the feature is fully opt-in.
 	 */
 	changeWebhookUrl: readString("CHANGE_WEBHOOK_URL"),
+	/**
+	 * Optional Discord webhook URL used by the editor's "Test message" panel
+	 * to preview embeds without saving. Mentions are always disabled. When
+	 * unset, the panel is hidden from the UI.
+	 */
+	testWebhookUrl: readString("TEST_WEBHOOK_URL"),
 	// Derive cookie security from the OAuth redirect URI: HTTPS deploys get
 	// `Secure` on every cookie, plain-HTTP local dev does not (otherwise the
 	// browser refuses to send cookies back over the unencrypted callback).

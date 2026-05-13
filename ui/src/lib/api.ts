@@ -44,6 +44,7 @@ export interface Me {
 	userId: string;
 	username: string;
 	manageableGuilds: { id: string; name: string; icon: string | null; via: "bootstrap" | "permission" }[];
+	testWebhookConfigured: boolean;
 }
 
 export interface ConfigPayload {
@@ -93,6 +94,11 @@ export interface DiscordRole {
 	color: number;
 	position: number;
 	managed: boolean;
+}
+
+export interface BackupSummary {
+	stamp: string;
+	author: { userId: string; username: string; savedAt: number } | null;
 }
 
 export interface HealthSnapshot {

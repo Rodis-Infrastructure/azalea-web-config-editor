@@ -73,29 +73,31 @@ export function LookupPanel({ channels, roles }: Props): JSX.Element {
 								key={item.id}
 								onClick={() => copy(item.id)}
 								className={
-									"flex items-center gap-2 py-1 px-1 rounded cursor-pointer transition-colors " +
+									"py-1 px-1.5 rounded cursor-pointer transition-colors " +
 									(copied ? "bg-ok/15" : "hover:bg-bg-3")
 								}
 								title={`Click to copy ${item.id}`}
 							>
-								<span className="flex-1 min-w-0 truncate">
-									{tab === "channels"
-										? `${discordChannelPrefix((item as DiscordChannel).type)}${item.name}`
-										: <><RoleDot color={(item as DiscordRole).color} />{item.name}</>}
-								</span>
-								{tab === "channels" && (
-									<span className="text-[10px] uppercase tracking-wider text-muted shrink-0">
-										{discordChannelTypeName((item as DiscordChannel).type)}
+								<div className="flex items-center gap-2 min-w-0">
+									<span className="flex-1 min-w-0 truncate text-fg">
+										{tab === "channels"
+											? `${discordChannelPrefix((item as DiscordChannel).type)}${item.name}`
+											: <><RoleDot color={(item as DiscordRole).color} />{item.name}</>}
 									</span>
-								)}
-								<span
+									{tab === "channels" && (
+										<span className="text-[10px] uppercase tracking-wider text-muted shrink-0">
+											{discordChannelTypeName((item as DiscordChannel).type)}
+										</span>
+									)}
+								</div>
+								<div
 									className={
-										"mono text-[11px] shrink-0 " +
+										"mono text-[10px] truncate " +
 										(copied ? "text-ok" : "text-muted")
 									}
 								>
 									{copied ? "✓ copied" : item.id}
-								</span>
+								</div>
 							</li>
 						);
 					})
