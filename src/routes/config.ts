@@ -1,11 +1,5 @@
-/**
- * Per-guild config endpoints:
- *   GET    /api/guilds/:guildId/config             → current YAML + mtime + parse
- *   POST   /api/guilds/:guildId/config/validate    → server-side safeParse
- *   POST   /api/guilds/:guildId/config             → save pipeline
- *   GET    /api/guilds/:guildId/config/backups     → list backups
- *   POST   /api/guilds/:guildId/config/restore     → restore + reload
- */
+// Per-guild config CRUD: GET/POST /, POST /validate, GET /backups,
+// POST /restore, POST /test-webhook.
 import { Hono } from "hono";
 import { parse as yamlParse } from "yaml";
 import { sessionMiddleware } from "@/middleware/session";
@@ -72,7 +66,7 @@ configRoutes.post("/", async c => {
 	});
 
 	if (success) {
-		// Fire-and-forget — webhook latency must not block the response.
+		// Fire-and-forget so webhook latency can't block the response.
 		void notifyConfigChange({
 			action: "save",
 			guildId,
@@ -147,13 +141,8 @@ configRoutes.post("/restore", async c => {
 
 const WEBHOOK_FETCH_TIMEOUT_MS = 5_000;
 
-/**
- * Proxy a "test message" through the editor's preview webhook (configured
- * via `TEST_WEBHOOK_URL`). The caller pastes a YAML fragment — a single
- * embed, an array of embeds, or a raw string for `content` — and we
- * forward to Discord with mentions suppressed so nobody gets pinged from
- * a preview.
- */
+// Forward a YAML fragment (string / object / array of embeds) to
+// TEST_WEBHOOK_URL with mentions disabled.
 configRoutes.post("/test-webhook", async c => {
 	const url = env.testWebhookUrl;
 	if (!url) {
@@ -218,9 +207,8 @@ function buildWebhookPayload(parsed: unknown): { value: DiscordWebhookPayload } 
 		return { value: { embeds: parsed, allowed_mentions } };
 	}
 	if (isPlainObject(parsed)) {
-		// If it looks like a full Discord-style payload (has top-level content
-		// or embeds keys), respect that. Otherwise treat the object as a single
-		// embed — matches how embeds are defined in the YAML config.
+		// Discord-style payload if top-level `content`/`embeds` exist;
+		// otherwise treat the object as a single embed.
 		const obj = parsed as Record<string, unknown>;
 		if ("embeds" in obj || "content" in obj) {
 			const out: DiscordWebhookPayload = { allowed_mentions };
@@ -237,16 +225,8 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/**
- * Audit log–safe summary of a save outcome. Specifically NEVER quotes the
- * underlying YAML parser message, which the `yaml` library generates with
- * a fragment of the offending input — an operator who pastes a secret
- * into a malformed draft would otherwise have that fragment persisted
- * forever in the audit DB.
- *
- * Zod-stage errors are safe to keep verbatim: they report paths and
- * expected-type messages, not the original values.
- */
+// Never quote yaml-stage parser errors: they include a fragment of the
+// offending input, which can contain secrets pasted into a draft.
 function describeOutcomeForAudit(outcome: Awaited<ReturnType<typeof saveGuildConfig>>): string {
 	switch (outcome.status) {
 		case "validation_failed": {

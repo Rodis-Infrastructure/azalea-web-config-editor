@@ -1,9 +1,5 @@
-/**
- * Append-only audit log. Every config-mutating action (and every preview)
- * lands here with the actor, target guild, and full before/after YAML
- * blobs so we can reconstruct the state of any config at any point in
- * time.
- */
+// Append-only audit log. Stores full before/after YAML blobs for
+// forensics until they age out via purgeOldAuditBlobs.
 import { createHash } from "node:crypto";
 import { getDb } from "@lib/db";
 
@@ -100,16 +96,8 @@ function sha256(input: string): string {
 	return createHash("sha256").update(input).digest("hex");
 }
 
-/**
- * Null out the YAML blob columns on audit rows older than
- * `retentionDays`. The row itself (timestamp, actor, action, hashes,
- * success) is retained — only the raw config bodies age out, so the
- * timeline stays reconstructible from hashes without keeping the
- * potentially sensitive content forever.
- *
- * `retentionDays <= 0` disables purging (useful for tests and operators
- * who archive editor.db elsewhere).
- */
+// Nulls before_blob / after_blob on rows older than `retentionDays`.
+// Row itself (ts, actor, action, hashes) is retained. `<= 0` disables.
 export function purgeOldAuditBlobs(retentionDays: number): number {
 	if (retentionDays <= 0) return 0;
 	const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000;

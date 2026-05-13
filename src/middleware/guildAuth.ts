@@ -1,9 +1,5 @@
-/**
- * Per-guild authorization middleware. Runs after the session middleware
- * for any route under `/api/guilds/:guildId/*`. Re-derives the permission
- * decision on every request by reading the guild config + member roles
- * fresh — never trusts cached state.
- */
+// Re-derives the permission decision per request (no caching) from the
+// live config + member roles.
 import { createMiddleware } from "hono/factory";
 import { authorizeGuildEdit } from "@lib/auth";
 import { readConfigFile, validateConfigYaml } from "@lib/config";

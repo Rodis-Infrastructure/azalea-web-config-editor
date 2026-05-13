@@ -1,21 +1,6 @@
-/**
- * The save pipeline. Owns the contract between "user clicked save in the
- * editor" and "the bot is running the new config" — including rollback
- * when the new config crashes the bot on startup.
- *
- * Sequence per save (every step is observable for the audit log):
- *   1. Acquire per-guild lock.
- *   2. Validate the proposed YAML against the bot's Zod schema.
- *   3. Conflict check on `mtime` if the caller supplied one.
- *   4. Backup current file (rotation handled inside config.ts).
- *   5. Atomic write (.tmp → rename).
- *   6. Acquire global pm2-reload lock; capture pre-reload `startedAt`.
- *   7. Spawn `pm2 reload <app> --update-env` from the bot's parent dir.
- *   8. Poll /healthz until ready=true and startedAt advances, or timeout.
- *   9. On timeout: restore previous file → reload again → poll again.
- *      If the second reload also fails, abort with `degraded` so the
- *      operator knows manual intervention is required.
- */
+// Save pipeline: validate → backup → write → pm2 reload → poll /healthz.
+// If the new config doesn't come up healthy, restore the backup and reload
+// again; if THAT fails, return `degraded` for manual intervention.
 import { spawn } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { withLock } from "@lib/lock";
@@ -42,25 +27,18 @@ export type SaveOutcome =
 export interface SaveInput {
 	guildId: string;
 	yamlText: string;
-	/** Optional optimistic-concurrency token. If supplied, the save aborts when
-	 *  the on-disk mtime differs (another editor saved in between). */
+	/** Optimistic-concurrency token: aborts if on-disk mtime differs. */
 	expectedMtimeMs?: number;
-	/**
-	 * Who is saving. Persisted in a sidecar so future backups can name the
-	 * author of the snapshot they replaced.
-	 */
 	actor?: { userId: string; username: string };
 }
 
 export async function saveGuildConfig(input: SaveInput): Promise<SaveOutcome> {
 	return withLock(`guild:${input.guildId}`, async () => {
-		// 1. Validate.
 		const validation = validateConfigYaml(input.yamlText);
 		if (!validation.ok) {
 			return { status: "validation_failed", errors: validation.errors };
 		}
 
-		// 2. Conflict check.
 		const current = readConfigFile(input.guildId);
 		if (
 			input.expectedMtimeMs !== undefined &&
@@ -70,13 +48,9 @@ export async function saveGuildConfig(input: SaveInput): Promise<SaveOutcome> {
 			return { status: "conflict", serverMtimeMs: current.mtimeMs };
 		}
 
-		// 3. Backup.
 		const backupPath = backupConfigFile(input.guildId);
-
-		// 4. Atomic write.
 		writeConfigFileAtomic(input.guildId, input.yamlText);
 
-		// 5. Record current author so the next backup knows who saved this one.
 		if (input.actor) {
 			writeCurrentAuthor(input.guildId, {
 				userId: input.actor.userId,
@@ -85,7 +59,6 @@ export async function saveGuildConfig(input: SaveInput): Promise<SaveOutcome> {
 			});
 		}
 
-		// 6. Reload + verify.
 		return withLock("pm2-reload", () => reloadAndVerify(input.guildId, backupPath));
 	});
 }
@@ -99,8 +72,6 @@ async function reloadAndVerify(
 
 	const reloadResult = await pm2Reload();
 	if (!reloadResult.ok) {
-		// pm2 itself failed (binary missing, ecosystem file unreadable, etc).
-		// Still try the rollback path — maybe the file write was the issue.
 		return rollback(guildId, backupPath, "reload_failed", reloadResult.message);
 	}
 
@@ -119,8 +90,7 @@ async function rollback(
 	detail?: string
 ): Promise<SaveOutcome> {
 	if (!backupPath) {
-		// First-ever save for this guild and it crashed the bot. Remove the
-		// failing file entirely so the next reload starts clean.
+		// First-ever save crashed the bot — no backup to fall back to.
 		return {
 			status: "degraded",
 			reason: detail ?? `${reason}; no backup available to restore`,
@@ -128,12 +98,10 @@ async function rollback(
 		};
 	}
 
-	// Restore: write backup contents directly back into the live config file.
 	const backupContent = Bun.file(backupPath);
 	const yamlText = await backupContent.text();
 	writeFileSync(configPath(guildId), yamlText, "utf8");
 
-	// Second reload — should succeed because we just restored a known-good config.
 	const before = await fetchHealth();
 	const priorStartedAt = before?.startedAt ?? "";
 	const reload = await pm2Reload();
@@ -182,7 +150,6 @@ function pm2Reload(): Promise<ReloadResult> {
 	});
 }
 
-/** Tail the bot's pm2 logs so the editor can show the operator what crashed. */
 export function tailPm2Logs(lines = 200): Promise<string> {
 	return new Promise(res => {
 		const child = spawn(

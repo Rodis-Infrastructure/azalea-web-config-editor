@@ -1,11 +1,5 @@
-/**
- * GET /api/health → proxies the bot's /healthz so the browser can detect
- * version drift (deploy mid-edit-session) without itself reaching the
- * loopback-bound bot endpoint.
- *
- * Returns the same shape the bot exposes: { ready, pid, startedAt, name,
- * version }, plus an `ok: false` envelope when the bot is unreachable.
- */
+// GET /api/health proxies the bot's /healthz so the browser can detect
+// version drift. The bot itself binds to loopback only.
 import { Hono } from "hono";
 import { sessionMiddleware, requireSession, type SessionEnv } from "@/middleware/session";
 import { fetchHealth } from "@lib/healthcheck";

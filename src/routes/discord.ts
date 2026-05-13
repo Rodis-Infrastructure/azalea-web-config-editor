@@ -1,8 +1,4 @@
-/**
- * Read-only proxy routes for Discord guild metadata. The frontend pickers
- * use these to populate channel / role / emoji dropdowns. Cached
- * server-side for 30s in-memory (see `lib/discord.ts`).
- */
+// Read-only Discord metadata proxy. See `lib/discord.ts` for the 30s cache.
 import { Hono } from "hono";
 import { sessionMiddleware } from "@/middleware/session";
 import { guildAuthMiddleware, type GuildAuthEnv } from "@/middleware/guildAuth";

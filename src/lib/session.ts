@@ -1,12 +1,5 @@
-/**
- * Server-side session store. Sessions are persisted in SQLite so a
- * deploy / restart doesn't sign every operator out. The cookie body
- * carries only the opaque session ID + an HMAC signature.
- *
- * Permission decisions are NEVER cached in the session — they're
- * re-derived per request from the live config and member roles, so a
- * role change takes effect on the next click.
- */
+// Cookie carries `<sessionId>.<HMAC-sig>`. Permission decisions are
+// re-derived per request — never cached in the session row.
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { getDb } from "@lib/db";
 import { env } from "@lib/env";
@@ -60,10 +53,6 @@ export function destroySession(id: string): void {
 export function purgeExpiredSessions(): void {
 	getDb().run("DELETE FROM sessions WHERE expires_at <= ?", [Date.now()]);
 }
-
-// Cookie signing — HMAC-SHA256 with `SESSION_SECRET`, base64url. Format:
-// `<sessionId>.<signature>`. We only verify integrity here; lookup goes
-// through `loadSession` which does its own expiry check.
 
 export function signCookieValue(sessionId: string): string {
 	const sig = createHmac("sha256", env.sessionSecret).update(sessionId).digest("base64url");

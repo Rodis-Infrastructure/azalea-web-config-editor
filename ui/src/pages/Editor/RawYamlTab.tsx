@@ -19,17 +19,12 @@ type Tab = "edit" | "diff";
 
 const THEME_NAME = "azalea-dark";
 
-/**
- * Custom Monaco theme matching the editor's design tokens (see
- * ui/src/styles.css `@theme`). Registered once on first editor mount;
- * subsequent mounts reuse it.
- */
+// Mirrors the design tokens in styles.css.
 function ensureTheme(monaco: Parameters<OnMount>[1]): void {
 	monaco.editor.defineTheme(THEME_NAME, {
 		base: "vs-dark",
 		inherit: true,
 		rules: [
-			// Tone the YAML rule colours toward the design palette.
 			{ token: "comment", foreground: "8a93a1", fontStyle: "italic" },
 			{ token: "string", foreground: "f4dbb5" },
 			{ token: "string.yaml", foreground: "f4dbb5" },
@@ -80,8 +75,7 @@ export function RawYamlTab({
 	const monacoRef = useRef<Parameters<OnMount>[1] | null>(null);
 	const [mounted, setMounted] = useState(false);
 
-	// Keep a stable callback ref so the Monaco command — registered once per
-	// guild — always invokes the latest handler.
+	// Stable ref so the Monaco command always calls the latest onStatus.
 	const onStatusRef = useRef(onStatus);
 	useEffect(() => { onStatusRef.current = onStatus; }, [onStatus]);
 
@@ -93,9 +87,8 @@ export function RawYamlTab({
 		setMounted(true);
 	};
 
-	// Hand the editor instance to the parent via effect so React StrictMode's
-	// dev-mode double mount (and any HMR remount) re-pushes the live editor
-	// instead of leaving a disposed reference behind.
+	// Push the editor up via effect so StrictMode's double-mount (and HMR)
+	// re-publishes a live instance instead of a disposed one.
 	useEffect(() => {
 		if (!mounted) return;
 		const editor = editorRef.current;
@@ -103,9 +96,8 @@ export function RawYamlTab({
 		onEditorReady(editor);
 	}, [mounted, onEditorReady]);
 
-	// Register Zod errors as Monaco markers. Without per-line locations from
-	// the schema, surface them all at line 1 and rely on the Validation
-	// panel for the JSON path.
+	// Zod errors lack source locations; pin them all at line 1 and let
+	// the Validation panel show the JSON path.
 	useEffect(() => {
 		const editor = editorRef.current;
 		const monaco = monacoRef.current;
@@ -132,9 +124,8 @@ export function RawYamlTab({
 		);
 	}, [parse]);
 
-	// CodeLens above each embed-shaped YAML map: "$(beaker) Send test message".
-	// Clicking re-parses the buffer, resolves anchors/aliases, and POSTs the
-	// expanded embed through the editor's TEST_WEBHOOK_URL.
+	// CodeLens above each embed-shaped YAML map. Clicking re-parses,
+	// resolves anchors/aliases, and posts to TEST_WEBHOOK_URL.
 	useEffect(() => {
 		if (!mounted || !testEmbedEnabled) return;
 		const editor = editorRef.current;
@@ -209,10 +200,6 @@ export function RawYamlTab({
 		monaco.editor.setTheme(THEME_NAME);
 	};
 
-	// `h-full` flows from the parent grid cell which is sized via the page's
-	// flex chain. Monaco's automaticLayout watches the container and resizes
-	// accordingly, so the editor truly fills the available space rather than
-	// guessing a viewport-based height.
 	return (
 		<div className="bg-bg-2 border border-border rounded-md overflow-hidden h-full flex flex-col">
 			<div className="flex border-b border-border bg-bg-3 shrink-0">
@@ -308,8 +295,8 @@ const EMBED_KEYS = new Set([
 	"footer", "author", "fields", "image", "thumbnail"
 ]);
 
-// Keys that strongly imply "this object is meant to be a Discord embed" — used
-// to filter out unrelated maps that happen to share a single key like `url`.
+// "strong" keys filter out maps that happen to share a single ambiguous
+// key like `url` (e.g., embed authors).
 const STRONG_EMBED_KEYS = new Set([
 	"title", "description", "color",
 	"footer", "author", "fields", "image", "thumbnail"
@@ -333,11 +320,8 @@ interface EmbedHit {
 	path: JsPath;
 }
 
-/**
- * Walk the YAML document and find every map whose shape matches the embed
- * schema. We track the JS path (sequence of keys/indices) to each hit so
- * the click handler can re-resolve it after anchor expansion.
- */
+// Track JS path to each hit so the click handler can re-resolve after
+// anchor/alias expansion.
 function findEmbedNodes(text: string): EmbedHit[] {
 	let doc: YAML.Document.Parsed;
 	try {
@@ -370,11 +354,8 @@ function walk(node: unknown, path: JsPath, hits: EmbedHit[]): void {
 	}
 }
 
-/**
- * Re-parse the buffer, navigate `path` through the resolved JS tree (so
- * `*colors.blue` style aliases are expanded), and serialize the result
- * back to YAML for sending.
- */
+// `doc.toJS()` expands aliases like `*colors.blue` before we walk the
+// path and re-serialize for sending.
 function extractEmbedAtPath(text: string, path: JsPath): string {
 	const doc = YAML.parseDocument(text);
 	const resolved = doc.toJS({ maxAliasCount: 1000 }) as unknown;

@@ -1,11 +1,6 @@
-/**
- * Read/write helpers for the bot's `configs/<guild>.yml` files.
- *
- * Crucially, this module never imports the bot's `ConfigManager` or
- * `GuildConfig` — both call `process.exit(1)` on validation failure, which
- * would crash the editor. We use `rawGuildConfigSchema.safeParse` directly
- * and surface errors back to the caller.
- */
+// Never import the bot's `ConfigManager` / `GuildConfig`: both call
+// `process.exit(1)` on schema failure. Use `rawGuildConfigSchema.safeParse`
+// directly so a bad config can't kill the editor.
 import { existsSync, statSync, readFileSync, writeFileSync, renameSync, mkdirSync, readdirSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { parse as yamlParse } from "yaml";
@@ -22,12 +17,6 @@ export interface ParsedConfigFile extends ConfigFile {
 	parsed: unknown;
 }
 
-/**
- * Snowflake regex applied to every `guildId` before it touches the
- * filesystem. Exported so author-sidecar helpers can enforce the same
- * invariant locally without depending on every caller having gone
- * through the guild-auth middleware first.
- */
 const GUILD_ID_RE = /^\d{17,19}$/;
 
 function assertGuildId(guildId: string): void {
@@ -36,18 +25,11 @@ function assertGuildId(guildId: string): void {
 	}
 }
 
-/** Returns the absolute path to a guild's config file. */
 export function configPath(guildId: string): string {
 	assertGuildId(guildId);
 	return resolve(env.configsDir, `${guildId}.yml`);
 }
 
-/**
- * Sidecar tracking who last saved the live config. Written alongside the
- * `.yml` on every successful save and copied into the backup directory when
- * we rotate the file, so backups can name their author without joining
- * against the audit log.
- */
 export interface BackupAuthor {
 	userId: string;
 	username: string;
@@ -86,7 +68,6 @@ export function writeCurrentAuthor(guildId: string, author: BackupAuthor): void 
 	renameSync(tmp, path);
 }
 
-/** List the guild IDs that currently have a config file on disk. */
 export function listGuildIds(): string[] {
 	if (!existsSync(env.configsDir)) return [];
 	return readdirSync(env.configsDir)
@@ -94,7 +75,6 @@ export function listGuildIds(): string[] {
 		.map(name => name.replace(/\.ya?ml$/, ""));
 }
 
-/** Returns null if the file doesn't exist. Throws on read errors. */
 export function readConfigFile(guildId: string): ConfigFile | null {
 	const path = configPath(guildId);
 	if (!existsSync(path)) return null;
@@ -105,15 +85,9 @@ export function readConfigFile(guildId: string): ConfigFile | null {
 	return { guildId, yamlText, mtimeMs: stat.mtimeMs };
 }
 
-/**
- * Atomically write a guild's config file. Caller is responsible for
- * pre-flight validation (`safeParse`) — this function only verifies that
- * the YAML parses; it does not enforce schema rules.
- */
+// Caller is responsible for schema validation; this only checks the
+// text parses as YAML before we hand it to the bot.
 export function writeConfigFileAtomic(guildId: string, yamlText: string): void {
-	// Sanity check that the text parses as YAML at all. This catches the
-	// "user typed gibberish in the raw editor and clicked save" case before
-	// it reaches the bot.
 	yamlParse(yamlText);
 
 	const path = configPath(guildId);
@@ -123,11 +97,6 @@ export function writeConfigFileAtomic(guildId: string, yamlText: string): void {
 	renameSync(tmpPath, path);
 }
 
-/**
- * Backup the current config file (if any) under
- * `<configs>/.backups/<guildId>/<UTC-iso>.yml`. Rotates to keep the most
- * recent {@link RETAIN} files.
- */
 const RETAIN = 20;
 
 export function backupConfigFile(guildId: string): string | null {
@@ -141,8 +110,6 @@ export function backupConfigFile(guildId: string): string | null {
 	const backupPath = join(dir, `${stamp}.yml`);
 	writeFileSync(backupPath, readFileSync(path, "utf8"), "utf8");
 
-	// Capture the author of the content we just snapshotted so the editor can
-	// display "saved by X" against each backup.
 	const author = readCurrentAuthor(guildId);
 	if (author) {
 		writeFileSync(join(dir, `${stamp}.author.json`), JSON.stringify(author), "utf8");
@@ -156,14 +123,12 @@ function rotate(dir: string): void {
 	const entries = readdirSync(dir)
 		.filter(name => name.endsWith(".yml"))
 		.map(name => ({ name, path: join(dir, name) }))
-		.sort((a, b) => b.name.localeCompare(a.name)); // Newest first (ISO8601 sorts lexically)
+		.sort((a, b) => b.name.localeCompare(a.name)); // ISO8601 sorts lexically
 
 	for (const entry of entries.slice(RETAIN)) {
 		try {
 			renameSync(entry.path, `${entry.path}.deleted`);
-			// Best-effort delete; if it fails we just leave the .deleted file.
 			Bun.file(`${entry.path}.deleted`).delete().catch(() => undefined);
-			// Best-effort cleanup of the matching author sidecar.
 			const stamp = entry.name.replace(/\.yml$/, "");
 			const sidecar = join(dir, `${stamp}.author.json`);
 			if (existsSync(sidecar)) {
@@ -171,12 +136,11 @@ function rotate(dir: string): void {
 				catch { /* ignore */ }
 			}
 		} catch {
-			// Ignore rotation failures — they don't affect correctness of the save.
+			// Rotation failure doesn't affect save correctness.
 		}
 	}
 }
 
-/** List the available backups for a guild, newest first. */
 export function listBackups(guildId: string): { stamp: string; path: string; author: BackupAuthor | null }[] {
 	const dir = join(env.backupsDir, guildId);
 	if (!existsSync(dir)) return [];
@@ -194,32 +158,20 @@ export function listBackups(guildId: string): { stamp: string; path: string; aut
 		});
 }
 
-/**
- * Backup stamps are always generated by {@link backupConfigFile} as an
- * ISO-8601 timestamp with `:` / `.` replaced by `-`. We pin the allowed
- * shape here so a caller-supplied `stamp` can never break out of the
- * guild's backup directory via `..` or absolute-path tricks.
- */
+// Stamp shape matches what backupConfigFile generates — anything else
+// can't have come from us and could be a traversal attempt.
 const BACKUP_STAMP_RE = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d+Z$/;
 
-/** Read a specific backup file's contents by timestamp. */
 export function readBackup(guildId: string, stamp: string): string | null {
 	assertGuildId(guildId);
 	if (!BACKUP_STAMP_RE.test(stamp)) return null;
 	const dir = resolve(env.backupsDir, guildId);
 	const path = resolve(dir, `${stamp}.yml`);
-	// Belt and braces: even though the regex precludes traversal, assert the
-	// resolved path actually lives inside the per-guild backup directory
-	// before reading. `path.sep` covers Windows hosts; on Linux it's `/`.
 	if (!path.startsWith(dir + sep)) return null;
 	if (!existsSync(path)) return null;
 	return readFileSync(path, "utf8");
 }
 
-/**
- * Validate raw YAML text against `rawGuildConfigSchema`. Returns a
- * uniform shape so callers can render Zod issues to JSON-pointer paths.
- */
 export function validateConfigYaml(yamlText: string): {
 	ok: true;
 	parsed: unknown;
@@ -254,5 +206,4 @@ export function validateConfigYaml(yamlText: string): {
 	return { ok: true, parsed: result.data };
 }
 
-/** Convenience type re-export for callers wiring up routes. */
 export type ConfigValidationResult = ReturnType<typeof validateConfigYaml>;

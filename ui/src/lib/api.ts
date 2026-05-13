@@ -1,14 +1,5 @@
-/**
- * Thin fetch wrapper for the editor's JSON API. All routes are same-origin
- * (Vite dev proxies /api, /auth, /healthz to Hono in dev; in prod Hono
- * serves both API and static).
- */
-
-/**
- * `body` is always typed as the caller's `T` even on error responses —
- * every editor endpoint returns structured JSON with at least an `error`
- * or `status` field, so callers narrow on body shape rather than on `ok`.
- */
+// `body` is typed as `T` even on error responses — every endpoint
+// returns structured JSON; callers narrow on body shape.
 export interface ApiResponse<T> {
 	ok: boolean;
 	status: number;

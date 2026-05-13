@@ -33,8 +33,7 @@ export function LookupPanel({ channels, roles }: Props): JSX.Element {
 		try {
 			await navigator.clipboard.writeText(id);
 		} catch {
-			// Clipboard API can be blocked on http:// origins; fall back to
-			// the legacy execCommand path.
+			// Clipboard API blocked on http:// origins → execCommand fallback.
 			const ta = document.createElement("textarea");
 			ta.value = id;
 			document.body.appendChild(ta);

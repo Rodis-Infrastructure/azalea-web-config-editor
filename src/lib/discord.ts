@@ -1,12 +1,6 @@
-/**
- * Bot-token-backed Discord REST helpers. Used to:
- *   - Enumerate channels / roles / emojis for the editor's pickers.
- *   - Fetch a guild member to derive their roles for permission checks.
- *
- * All responses are cached in-process for `CACHE_TTL_MS` to keep the
- * editor responsive without hammering Discord; the editor's traffic is
- * tiny so a memory cache is plenty.
- */
+// Bot-token-backed Discord REST helpers. Cached in-process for
+// CACHE_TTL_MS — except `fetchMember`, which auth decisions depend on
+// and so always hits the network.
 import { env } from "@lib/env";
 
 const DISCORD_API = "https://discord.com/api/v10";
@@ -91,10 +85,6 @@ export function listEmojis(guildId: string): Promise<DiscordEmoji[]> {
 	return discordGet<DiscordEmoji[]>(`/guilds/${guildId}/emojis`, `emojis:${guildId}`);
 }
 
-/**
- * Fetch a member's role IDs. NOT cached — auth decisions need fresh data so
- * a role removal takes effect on the next click.
- */
 export async function fetchMember(guildId: string, userId: string): Promise<DiscordMember | null> {
 	const res = await fetch(`${DISCORD_API}/guilds/${guildId}/members/${userId}`, {
 		headers: botAuthHeaders(),
@@ -108,10 +98,6 @@ export async function fetchMember(guildId: string, userId: string): Promise<Disc
 	return await res.json() as DiscordMember;
 }
 
-/**
- * Fetch a basic guild snapshot (id, name, icon, owner). Used for the
- * /api/me response so the picker shows guild names, not just IDs.
- */
 export interface DiscordGuildSummary {
 	id: string;
 	name: string;
@@ -123,7 +109,6 @@ export function fetchGuild(guildId: string): Promise<DiscordGuildSummary> {
 	return discordGet<DiscordGuildSummary>(`/guilds/${guildId}`, `guild:${guildId}`);
 }
 
-/** Test/admin helper — clear the cache (used in tests). */
 export function _clearCacheForTesting(): void {
 	cache.clear();
 }

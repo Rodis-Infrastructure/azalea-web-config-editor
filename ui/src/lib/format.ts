@@ -1,11 +1,9 @@
-/** Shared formatters for timestamps and Discord-flavoured display. */
-
 export function fmtTimestamp(epochMs: number | undefined | null): string {
 	if (!epochMs) return "—";
 	return new Date(epochMs).toLocaleString();
 }
 
-/** Backup stamps are ISO with `:` and `.` replaced by `-` for filesystem safety. */
+// Stamps are ISO with `:` / `.` replaced by `-` for filesystem safety.
 export function fmtBackupStamp(stamp: string): string {
 	const m = stamp.match(/^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d+)Z$/);
 	if (!m) return stamp;
@@ -29,7 +27,6 @@ export function discordChannelPrefix(type: number): string {
 	}
 }
 
-/** Short, human-readable name for a Discord channel type. */
 export function discordChannelTypeName(type: number): string {
 	switch (type) {
 		case 0: return "text";

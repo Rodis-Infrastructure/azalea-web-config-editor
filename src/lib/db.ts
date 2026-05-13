@@ -1,9 +1,5 @@
-/**
- * SQLite store for sessions and the audit log. Uses Bun's built-in
- * `bun:sqlite`. Lives entirely inside the editor — never reuses the bot's
- * Prisma DB so the two services stay decoupled (different lifecycles,
- * separate backup story).
- */
+// Editor-local SQLite for sessions and the audit log. Intentionally
+// separate from the bot's Prisma DB.
 import { Database } from "bun:sqlite";
 import { dirname, resolve } from "node:path";
 import { mkdirSync } from "node:fs";
@@ -55,7 +51,6 @@ function migrate(db: Database): void {
 	`);
 }
 
-/** Test helper — swap in an in-memory DB for unit tests. */
 export function _setDbForTesting(db: Database | null): void {
 	_db = db;
 	if (db) migrate(db);

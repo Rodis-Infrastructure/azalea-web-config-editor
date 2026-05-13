@@ -1,9 +1,5 @@
-/**
- * Hono middleware that reads the session cookie, verifies its signature,
- * loads the corresponding session row, and attaches it to the context.
- * Routes that require auth read `c.get("session")`; routes that don't
- * (e.g. the OAuth callback) read it but don't fail when absent.
- */
+// Loads session into context. Routes that require auth use
+// `requireSession`; routes that tolerate anonymous reads use `sessionMiddleware` alone.
 import { createMiddleware } from "hono/factory";
 import { getCookie } from "hono/cookie";
 import {

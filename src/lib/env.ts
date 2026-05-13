@@ -1,9 +1,6 @@
-/**
- * Environment access. `env` returns whatever is configured (or sensible
- * defaults) without throwing — modules that only need a path or a default
- * value can read it freely. The server entry calls `assertRuntimeEnv()`
- * before binding a port to verify every required field is set.
- */
+// `env` returns whatever's set (or a default) without throwing.
+// `assertRuntimeEnv()` is called once at boot to fail fast on missing
+// required vars.
 import { resolve } from "node:path";
 
 function readPath(name: string): string {
@@ -40,12 +37,8 @@ export const env = {
 	sessionSecret: readString("SESSION_SECRET"),
 	editorHost: readString("EDITOR_HOST", "127.0.0.1"),
 	editorPort: readNumber("EDITOR_PORT", 7476),
-	/**
-	 * Port Hono actually binds to. In dev this is set to a different port
-	 * (e.g. 7477) so Vite can serve the UI on EDITOR_PORT and proxy here.
-	 * In prod it falls through to EDITOR_PORT and Hono serves both API
-	 * and the built UI on the user-facing port.
-	 */
+	// Dev sets BACKEND_PORT separately so Vite owns EDITOR_PORT and proxies.
+	// In prod Hono binds to EDITOR_PORT directly.
 	backendPort: readNumber("BACKEND_PORT", readNumber("EDITOR_PORT", 7476)),
 	bootstrapUserIds: new Set(
 		readString("BOOTSTRAP_USER_IDS", "")
@@ -53,30 +46,11 @@ export const env = {
 			.map(id => id.trim())
 			.filter(Boolean)
 	),
-	/**
-	 * Optional Discord webhook URL. When set, every successful save or
-	 * restore posts an embed describing who changed what. When unset,
-	 * the post is silently skipped — the feature is fully opt-in.
-	 */
 	changeWebhookUrl: readString("CHANGE_WEBHOOK_URL"),
-	/**
-	 * Optional Discord webhook URL used by the editor's "Test message" panel
-	 * to preview embeds without saving. Mentions are always disabled. When
-	 * unset, the panel is hidden from the UI.
-	 */
 	testWebhookUrl: readString("TEST_WEBHOOK_URL"),
-	/**
-	 * Audit log YAML blob retention in days. Every save and restore writes
-	 * the full before/after config into SQLite for forensics; this caps how
-	 * long those blobs live. The audit row itself stays — only the blob
-	 * columns get nulled out — so timelines remain reconstructible by
-	 * hash but the raw content ages out. Defaults to 90 days; set to 0 to
-	 * disable purging entirely.
-	 */
 	auditBlobRetentionDays: readNumber("AUDIT_BLOB_RETENTION_DAYS", 90),
-	// Derive cookie security from the OAuth redirect URI: HTTPS deploys get
-	// `Secure` on every cookie, plain-HTTP local dev does not (otherwise the
-	// browser refuses to send cookies back over the unencrypted callback).
+	// HTTPS deploys get Secure cookies; plain-HTTP dev does not, else
+	// the browser drops the cookie on the callback.
 	cookieSecure: redirectUri.startsWith("https://")
 } as const;
 
@@ -89,10 +63,6 @@ const REQUIRED: { name: string; value: string }[] = [
 	{ name: "SESSION_SECRET", value: env.sessionSecret }
 ];
 
-/**
- * Throws if any required env var is missing. Called once from the server
- * entry; never from library code or tests.
- */
 export function assertRuntimeEnv(): void {
 	const missing = REQUIRED.filter(({ value }) => !value).map(({ name }) => name);
 	if (missing.length > 0) {

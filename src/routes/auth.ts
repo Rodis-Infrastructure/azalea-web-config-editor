@@ -1,10 +1,4 @@
-/**
- * Discord OAuth flow:
- *   GET /auth/login    → 302 to Discord authorize, sets a short-lived
- *                        signed `oauth_state` cookie for CSRF.
- *   GET /auth/callback → verifies state, exchanges code, creates session.
- *   POST /auth/logout  → destroys the session.
- */
+// /auth/login → Discord; /auth/callback → session; /auth/logout → destroy.
 import { Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import {
@@ -39,10 +33,8 @@ authRoutes.get("/callback", async c => {
 	const stateParam = c.req.query("state");
 	const stateCookie = getCookie(c, STATE_COOKIE);
 
-	// Discord-side errors (?error=access_denied, ?error=consent_required,
-	// etc.) come back without a `code`. Surface those distinctly so an
-	// operator who cancelled the prompt isn't told their request was a
-	// CSRF attempt.
+	// Discord-side errors come back without a `code`; surface them
+	// distinctly from genuine CSRF state mismatches.
 	const discordError = c.req.query("error");
 	if (discordError) {
 		deleteCookie(c, STATE_COOKIE, { path: "/" });

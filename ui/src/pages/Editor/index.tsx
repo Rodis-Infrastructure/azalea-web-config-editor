@@ -97,7 +97,7 @@ export function EditorPage({ me }: { me: Me }): JSX.Element {
 	// Debounced live validate.
 	const validateSeq = useRef(0);
 	useEffect(() => {
-		if (!yaml && yaml !== "") return; // Initial empty before load
+		if (!yaml && yaml !== "") return;
 		const handle = setTimeout(async () => {
 			const seq = ++validateSeq.current;
 			const res = await api<ValidationResult>(`/api/guilds/${guildId}/config/validate`, {
@@ -183,7 +183,6 @@ export function EditorPage({ me }: { me: Me }): JSX.Element {
 			body: JSON.stringify({ stamp, expectedMtimeMs: mtimeMs ?? undefined })
 		});
 		if (res.ok && res.body.status === "saved") {
-			// Reload the editor state.
 			navigate(0);
 			return;
 		}

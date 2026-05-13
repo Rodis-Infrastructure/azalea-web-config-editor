@@ -1,7 +1,4 @@
-/**
- * Audit log read endpoint. Per-guild filtering and a default cap of 100
- * rows; frontend can paginate via `?limit=`.
- */
+// GET /api/guilds/:id/audit — paginated via ?limit= (default 100, max 500).
 import { Hono } from "hono";
 import { sessionMiddleware } from "@/middleware/session";
 import { guildAuthMiddleware, type GuildAuthEnv } from "@/middleware/guildAuth";

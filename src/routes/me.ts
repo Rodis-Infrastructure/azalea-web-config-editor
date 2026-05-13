@@ -1,12 +1,5 @@
-/**
- * GET /api/me → identity + manageable guilds.
- *
- * Walks every guild that has a config file on disk, runs the same
- * permission check the per-guild routes use, and returns only those
- * the current user can edit. The check uses the bot token to fetch
- * the user's member object (so we never need the user's OAuth access
- * token after callback) and mirrors the bot's `GuildConfig.hasPermission`.
- */
+// GET /api/me — identity plus the subset of on-disk guilds the user
+// can edit, derived via authorizeGuildEdit.
 import { Hono } from "hono";
 import { authorizeGuildEdit } from "@lib/auth";
 import { fetchGuild } from "@lib/discord";

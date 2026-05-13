@@ -1,10 +1,5 @@
-/**
- * Editor server entry. Validates env, mounts routes, binds to loopback.
- *
- * Always front this with a reverse proxy that terminates TLS — the editor
- * binds 127.0.0.1 by default and never speaks plaintext to the public
- * internet.
- */
+// Front this with a TLS-terminating reverse proxy — the editor binds
+// 127.0.0.1 by default and speaks plaintext.
 import { Hono } from "hono";
 import { logger } from "hono/logger";
 import { bodyLimit } from "hono/body-limit";
@@ -28,38 +23,14 @@ purgeExpiredSessions();
 purgeOldAuditBlobs(env.auditBlobRetentionDays);
 
 const PROJECT_ROOT = resolve(import.meta.dir, "..");
-// Production: Hono serves the Vite-built React app from ui/dist. In dev,
-// these paths simply don't exist — Vite handles UI and proxies API calls
-// here, so the SPA fallback below is unused.
 const UI_DIST = resolve(PROJECT_ROOT, "ui", "dist");
 const UI_INDEX = resolve(UI_DIST, "index.html");
 
 const app = new Hono();
 app.use("*", logger());
 
-/**
- * Baseline security headers applied to every response. Each one closes a
- * specific gap rather than a vague "defense in depth":
- *
- * - X-Frame-Options: DENY — refuses to render the editor in any iframe,
- *   so a malicious page can't load it cookie-bearing and clickjack the
- *   Save button. (Browsers ignore the cookie for cross-site iframe
- *   subresources thanks to SameSite=Lax, but this keeps the page from
- *   even rendering visually.)
- *
- * - X-Content-Type-Options: nosniff — stops browsers from MIME-sniffing
- *   the YAML payloads we serve as application/json into a script context.
- *
- * - Referrer-Policy: same-origin — keeps the editor's URLs (including
- *   guild IDs in the path) from leaking to third parties when a user
- *   clicks an external link from inside a config.
- *
- * - Content-Security-Policy — locks the page to same-origin scripts and
- *   styles, allows `blob:` workers for Monaco's tokenizer, allows
- *   inline styles (Monaco injects them at runtime), permits Discord's
- *   CDN for guild icons, and blocks everything else (objects, frames,
- *   form posts to other origins).
- */
+// `'unsafe-inline'` for styles is needed by Monaco; `blob:` workers
+// are needed by its tokenizer; `cdn.discordapp.com` serves guild icons.
 const SECURITY_CSP = [
 	"default-src 'self'",
 	"script-src 'self'",
@@ -81,10 +52,8 @@ function applySecurityHeaders(c: { header: (k: string, v: string) => void }): vo
 	c.header("Content-Security-Policy", SECURITY_CSP);
 }
 
-// `try/finally` so the headers land on every response — including error
-// responses synthesized by Hono after a route handler throws. Without
-// the `finally`, an exception in `next()` would skip the header-setting
-// block entirely and the 500 response would leave the page exposed.
+// `finally` so headers land on error responses too. `onError` re-applies
+// in case Hono's error path ever bypasses middleware unwinding.
 app.use("*", async (c, next) => {
 	try {
 		await next();
@@ -93,10 +62,6 @@ app.use("*", async (c, next) => {
 	}
 });
 
-// Hono's default error handler runs *outside* the middleware chain when
-// a downstream throw escapes, so re-apply the headers there too as a
-// belt-and-braces measure against future refactors that drop the
-// `finally` above.
 app.onError((err, c) => {
 	console.error("unhandled error:", err);
 	applySecurityHeaders(c);
@@ -105,11 +70,7 @@ app.onError((err, c) => {
 
 app.get("/healthz", c => c.json({ ok: true }));
 
-// Cap every body-bearing route at 1 MiB. The largest legitimate payload is a
-// guild YAML config; real-world configs run a few hundred KiB at most. The
-// limit defends the editor from a single oversized JSON body OOM'ing the
-// process before any route handler validates the shape. `/auth/*` shares
-// the cap so future POSTs under that prefix don't accidentally bypass it.
+// Configs run a few hundred KiB; 1 MiB is a safe ceiling.
 const MAX_BODY_BYTES = 1 * 1024 * 1024;
 const bodyLimitMiddleware = bodyLimit({
 	maxSize: MAX_BODY_BYTES,
@@ -127,17 +88,22 @@ app.route("/api/guilds/:guildId/config", configRoutes);
 app.route("/api/guilds/:guildId/discord", discordRoutes);
 app.route("/api/guilds/:guildId/audit", auditRoutes);
 
-// SPA assets — Hono serves ui/dist in production. In dev, BACKEND_PORT
-// runs Hono on its own port and Vite handles the UI; these handlers
-// effectively never fire because Vite proxies the API/auth routes here
-// without ever asking the backend for HTML.
+// Hono drops Bun.file's implicit Content-Type, which combined with
+// nosniff makes browsers download instead of render. Set it explicitly.
+function fileResponse(path: string): Response {
+	const file = Bun.file(path);
+	return new Response(file, {
+		headers: { "Content-Type": file.type || "application/octet-stream" }
+	});
+}
+
 app.get("/assets/*", c => {
 	const rel = c.req.path.replace(/^\//, "");
 	const target = resolve(UI_DIST, rel);
 	if (!target.startsWith(UI_DIST + sep) || !existsSync(target)) {
 		return c.text("Not found", 404);
 	}
-	return new Response(Bun.file(target));
+	return fileResponse(target);
 });
 
 app.get("*", c => {
@@ -148,7 +114,7 @@ app.get("*", c => {
 			500
 		);
 	}
-	return new Response(Bun.file(UI_INDEX));
+	return fileResponse(UI_INDEX);
 });
 
 const server = Bun.serve({
@@ -159,8 +125,6 @@ const server = Bun.serve({
 
 console.log(`azalea-editor listening on http://${server.hostname}:${server.port}`);
 
-// Sweep expired sessions and age out audit blobs hourly. Both are cheap
-// SQL writes; running them together keeps the timer count down.
 setInterval(() => {
 	purgeExpiredSessions();
 	purgeOldAuditBlobs(env.auditBlobRetentionDays);
