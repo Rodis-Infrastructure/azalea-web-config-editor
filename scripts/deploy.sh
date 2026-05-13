@@ -2,23 +2,18 @@
 # Production deploy script. Run from the azalea-editor project root after
 # `git pull`. Invoked over SSH by .github/workflows/cd.yml.
 #
-# Two PM2 services live one directory up (~/Projects/ecosystem.config.js):
-# `azalea` (the bot) and `azalea-editor` (this app). We only reload the
-# editor here; the bot has its own deploy on its own repo.
+# CI builds the UI (Monaco bundles need more RAM than the deploy host
+# has) and ships `ui-dist.tar.gz` here via scp. This script extracts it
+# and installs runtime-only deps, so the host never has to bundle.
 
 set -euo pipefail
 
-# appleboy/ssh-action runs a non-interactive non-login shell, so the host's
-# ~/.bashrc / ~/.profile (where Bun and PM2 add themselves to PATH) is
-# never sourced. Re-add both binaries' default install dirs explicitly so
-# `bun` and `pm2` resolve regardless of how this script was invoked.
+# appleboy/ssh-action runs a non-interactive non-login shell; re-add Bun
+# and PM2 to PATH explicitly.
 export PATH="$HOME/.bun/bin:$HOME/.local/bin:/usr/local/bin:$PATH"
 
-# Pin the host's Bun to the version recorded in `.bun-version`. CI uses
-# the same file via `oven-sh/setup-bun`, so dev/CI/prod stay in lockstep
-# and we never silently pull a Bun release that hasn't been vetted in CI
-# first. If `.bun-version` is absent (e.g. when running this script from
-# a stale checkout) we fall back to the currently installed Bun.
+# Pin the host's Bun to the version in `.bun-version` so dev/CI/prod
+# stay in lockstep.
 PIN="$(cat .bun-version 2>/dev/null | tr -d '[:space:]')"
 if [ -n "$PIN" ]; then
   if [ "$(bun --version 2>/dev/null)" != "$PIN" ]; then
@@ -29,19 +24,22 @@ else
   echo "WARNING: .bun-version missing; using installed Bun $(bun --version)"
 fi
 
-# Install everything (incl. devDeps) — Vite + tsc need them at build time.
-bun install --frozen-lockfile
+# Unpack the CI-built UI artifact if it's here. Falls through to a host
+# build only when the tarball is absent (e.g. a manual deploy on a box
+# with enough RAM).
+if [ -f ui-dist.tar.gz ]; then
+  echo "Using CI-built ui/dist from ui-dist.tar.gz"
+  rm -rf ui/dist
+  mkdir -p ui/dist
+  tar -xzf ui-dist.tar.gz -C ui/dist
+  rm -f ui-dist.tar.gz
+  bun install --frozen-lockfile --production
+else
+  echo "WARNING: no ui-dist.tar.gz found; building locally."
+  bun install --frozen-lockfile
+  NODE_OPTIONS="--max-old-space-size=4096" bun run build
+  bun run typecheck
+fi
 
-# Compile the React UI into ui/dist, which Hono serves in production.
-# Cap the V8 old-space at 4 GB so small deploy hosts don't OOM during
-# Rollup's chunk emit even if Monaco grows again.
-NODE_OPTIONS="--max-old-space-size=4096" bun run build
-
-# Sanity-check the backend before reloading; tsc is fast and catches the
-# bot-source-relative imports we depend on.
-bun run typecheck
-
-# Reload the PM2 app. --update-env propagates any new env vars from the
-# resolved ecosystem entry (or from the parent process if launched under
-# `op run`). The bot stays untouched.
+# Reload the PM2 app. --update-env propagates any new env vars.
 ( cd .. && pm2 reload ecosystem.config.js --only azalea-editor --update-env )

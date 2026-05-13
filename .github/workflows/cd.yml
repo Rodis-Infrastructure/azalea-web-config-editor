@@ -7,6 +7,9 @@ on:
 
 permissions:
   contents: read
+  # workflow_run-triggered runs need actions:read to download artifacts
+  # produced by the upstream CI run.
+  actions: read
 
 concurrency:
   group: cd-${{ github.event.workflow_run.head_branch }}
@@ -17,6 +20,27 @@ jobs:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
+      - name: Download ui/dist from CI
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ui-dist
+          path: ui-dist
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pack ui-dist for transfer
+        run: tar -czf ui-dist.tar.gz -C ui-dist .
+
+      - name: SCP ui-dist.tar.gz to host
+        uses: appleboy/scp-action@917f8b81dfc1ccd331fef9e2d61bdc6c8be94634 # v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          port: ${{ secrets.SSH_PORT }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          source: ui-dist.tar.gz
+          target: Projects/azalea-editor/
+
       - name: Deploy
         uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262 # v1.0.3
         with:

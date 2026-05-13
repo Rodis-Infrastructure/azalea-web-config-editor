@@ -91,6 +91,16 @@ jobs:
         run: bun install --frozen-lockfile
       - name: Build UI
         run: bun run build
+      # The deploy host doesn't have enough RAM to bundle Monaco; ship
+      # the prebuilt UI to it via the CD workflow instead of building
+      # twice.
+      - name: Upload ui/dist
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4
+        with:
+          name: ui-dist
+          path: ui/dist
+          retention-days: 7
+          if-no-files-found: error
 
   audit:
     runs-on: ubuntu-latest
