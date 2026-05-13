@@ -33,7 +33,9 @@ fi
 bun install --frozen-lockfile
 
 # Compile the React UI into ui/dist, which Hono serves in production.
-bun run build
+# Cap the V8 old-space at 4 GB so small deploy hosts don't OOM during
+# Rollup's chunk emit even if Monaco grows again.
+NODE_OPTIONS="--max-old-space-size=4096" bun run build
 
 # Sanity-check the backend before reloading; tsc is fast and catches the
 # bot-source-relative imports we depend on.

@@ -35,6 +35,10 @@ export default defineConfig({
 	build: {
 		outDir: "../ui/dist",
 		emptyOutDir: true,
-		sourcemap: true
+		// Sourcemaps add ~14 MB to the build and roughly triple peak
+		// memory usage during Rollup's chunk emit — enough to OOM a
+		// 1 GB deploy host. Disable in production; dev still has full
+		// maps via Vite's dev server.
+		sourcemap: false
 	}
 });
