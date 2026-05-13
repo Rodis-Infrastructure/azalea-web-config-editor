@@ -104,6 +104,23 @@ export interface BackupSummary {
 	author: { userId: string; username: string; savedAt: number } | null;
 }
 
+export interface SavedWebhookMessage {
+	id: number;
+	name: string | null;
+	webhookUrl: string;
+	messageId: string;
+	threadId: string | null;
+	contentPreview: string;
+	savedAt: number;
+}
+
+export interface WebhookProxyResult {
+	ok: boolean;
+	status: number;
+	body: unknown;
+	error?: string;
+}
+
 export interface HealthSnapshot {
 	ok: boolean;
 	ready?: boolean;

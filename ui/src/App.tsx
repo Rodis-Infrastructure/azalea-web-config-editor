@@ -3,7 +3,9 @@ import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { api, type Me } from "./lib/api";
 import { Login } from "./pages/Login";
 import { GuildPicker } from "./pages/GuildPicker";
+import { GuildHome } from "./pages/GuildHome";
 import { EditorPage } from "./pages/Editor";
+import { WebhookBuilder } from "./pages/WebhookBuilder";
 
 type AuthState =
 	| { kind: "loading" }
@@ -34,7 +36,9 @@ export function App(): JSX.Element {
 			<main className="flex-1 min-h-0 max-w-[1400px] w-full mx-auto px-6 py-6 flex flex-col">
 				<Routes>
 					<Route path="/" element={<GuildPicker me={auth.me} />} />
-					<Route path="/g/:guildId" element={<EditorPage me={auth.me} />} />
+					<Route path="/g/:guildId" element={<GuildHome me={auth.me} />} />
+					<Route path="/g/:guildId/config" element={<EditorPage me={auth.me} />} />
+					<Route path="/g/:guildId/webhook-builder" element={<WebhookBuilder me={auth.me} />} />
 					<Route path="*" element={<Navigate to="/" replace />} />
 				</Routes>
 			</main>

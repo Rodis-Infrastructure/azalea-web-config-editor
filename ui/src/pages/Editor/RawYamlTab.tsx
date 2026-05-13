@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import Editor, { DiffEditor, type OnMount, type DiffOnMount } from "@monaco-editor/react";
 import * as YAML from "yaml";
 import { api, type ValidationResult } from "../../lib/api";
+import { THEME_NAME, ensureTheme } from "../../lib/monaco-theme";
 import type { SaveStatus } from "./index";
 
 interface Props {
@@ -16,48 +17,6 @@ interface Props {
 }
 
 type Tab = "edit" | "diff";
-
-const THEME_NAME = "azalea-dark";
-
-// Mirrors the design tokens in styles.css.
-function ensureTheme(monaco: Parameters<OnMount>[1]): void {
-	monaco.editor.defineTheme(THEME_NAME, {
-		base: "vs-dark",
-		inherit: true,
-		rules: [
-			{ token: "comment", foreground: "8a93a1", fontStyle: "italic" },
-			{ token: "string", foreground: "f4dbb5" },
-			{ token: "string.yaml", foreground: "f4dbb5" },
-			{ token: "number", foreground: "f0a020" },
-			{ token: "type", foreground: "5469ff" },
-			{ token: "type.yaml", foreground: "5469ff" }
-		],
-		colors: {
-			"editor.background": "#161b22",
-			"editor.foreground": "#e7ebf0",
-			"editorCursor.foreground": "#5469ff",
-			"editorLineNumber.foreground": "#4a525e",
-			"editorLineNumber.activeForeground": "#8a93a1",
-			"editor.lineHighlightBackground": "#1f2630",
-			"editor.lineHighlightBorder": "#1f2630",
-			"editor.selectionBackground": "#5469ff66",
-			"editor.inactiveSelectionBackground": "#5469ff33",
-			"editor.findMatchBackground": "#5469ff44",
-			"editor.findMatchHighlightBackground": "#5469ff22",
-			"editorWidget.background": "#1f2630",
-			"editorWidget.border": "#2a313c",
-			"editorIndentGuide.background1": "#2a313c",
-			"editorIndentGuide.activeBackground1": "#3a4250",
-			"scrollbarSlider.background": "#2a313c80",
-			"scrollbarSlider.hoverBackground": "#3a4250cc",
-			"scrollbarSlider.activeBackground": "#5469ffaa",
-			"editorGutter.background": "#161b22",
-			"editorBracketMatch.background": "#5469ff33",
-			"editorBracketMatch.border": "#5469ff",
-			"editorOverviewRuler.border": "#161b22"
-		}
-	});
-}
 
 export function RawYamlTab({
 	value,

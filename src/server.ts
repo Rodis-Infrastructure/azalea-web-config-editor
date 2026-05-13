@@ -12,6 +12,7 @@ import { configRoutes } from "@/routes/config";
 import { discordRoutes } from "@/routes/discord";
 import { auditRoutes } from "@/routes/audit";
 import { healthRoutes } from "@/routes/health";
+import { webhookRoutes } from "@/routes/webhook";
 import { sessionMiddleware } from "@/middleware/session";
 import { purgeExpiredSessions } from "@lib/session";
 import { purgeOldAuditBlobs } from "@lib/audit";
@@ -90,6 +91,7 @@ app.route("/api/health", healthRoutes);
 app.route("/api/guilds/:guildId/config", configRoutes);
 app.route("/api/guilds/:guildId/discord", discordRoutes);
 app.route("/api/guilds/:guildId/audit", auditRoutes);
+app.route("/api/guilds/:guildId/webhook", webhookRoutes);
 
 // Hono drops Bun.file's implicit Content-Type, which combined with
 // nosniff makes browsers download instead of render. Set it explicitly.

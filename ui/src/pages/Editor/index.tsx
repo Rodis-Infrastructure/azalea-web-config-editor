@@ -200,10 +200,10 @@ export function EditorPage({ me }: { me: Me }): JSX.Element {
 
 			<div className="flex items-center gap-3 mb-4">
 				<Link
-					to="/"
+					to={`/g/${guildId}`}
 					className="text-sm text-muted hover:text-fg border border-border rounded px-3 py-1.5 bg-bg-3 hover:bg-bg-2"
 				>
-					← Guilds
+					← Server
 				</Link>
 				<div className="flex-1 min-w-0 flex items-center gap-2">
 					<span className="font-semibold truncate">{guildSummary?.name ?? guildId}</span>
