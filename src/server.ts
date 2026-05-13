@@ -29,11 +29,14 @@ const UI_INDEX = resolve(UI_DIST, "index.html");
 const app = new Hono();
 app.use("*", logger());
 
-// `'unsafe-inline'` for styles is needed by Monaco; `blob:` workers
-// are needed by its tokenizer; `cdn.discordapp.com` serves guild icons.
+// Monaco needs `'unsafe-eval'` for its Monarch tokenizer (compiles regex
+// rules via `new Function`) and `blob:` for its web workers. We
+// self-host Monaco (see ui/src/monaco-setup.ts), so no third-party
+// script source is allowed — only `'self'` plus the necessary
+// eval/blob escape hatches.
 const SECURITY_CSP = [
 	"default-src 'self'",
-	"script-src 'self'",
+	"script-src 'self' 'unsafe-eval' blob:",
 	"style-src 'self' 'unsafe-inline'",
 	"font-src 'self' data:",
 	"img-src 'self' data: https://cdn.discordapp.com",
