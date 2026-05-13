@@ -17,18 +17,30 @@ export async function api<T = unknown>(
 		headers["content-type"] = "application/json";
 	}
 
-	const res = await fetch(path, {
-		credentials: "same-origin",
-		...init,
-		headers
-	});
+	// Never throw — a fetch rejection or unparseable body must become an
+	// `ok: false` response, else callers that only check `res.ok` end up
+	// stuck on whatever loading state they set before the call.
+	try {
+		const res = await fetch(path, {
+			credentials: "same-origin",
+			...init,
+			headers
+		});
 
-	const contentType = res.headers.get("content-type") ?? "";
-	const body = contentType.includes("application/json")
-		? await res.json()
-		: await res.text();
+		const contentType = res.headers.get("content-type") ?? "";
+		const body = contentType.includes("application/json")
+			? await res.json().catch(() => ({ error: "invalid_json" }))
+			: await res.text().catch(() => "");
 
-	return { ok: res.ok, status: res.status, body: body as T };
+		return { ok: res.ok, status: res.status, body: body as T };
+	} catch (err) {
+		const message = err instanceof Error ? err.message : String(err);
+		return {
+			ok: false,
+			status: 0,
+			body: { error: "network_error", message } as T
+		};
+	}
 }
 
 export interface Me {

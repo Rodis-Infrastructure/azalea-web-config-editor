@@ -77,7 +77,12 @@ export function EditorPage({ me }: { me: Me }): JSX.Element {
 			setStatus({ tone: "info", message: "Loading…" });
 			const cfg = await api<ConfigPayload>(`/api/guilds/${guildId}/config`);
 			if (!cfg.ok) {
-				setStatus({ tone: "err", message: `Failed to load config (HTTP ${cfg.status})` });
+				setStatus({
+					tone: "err",
+					message: cfg.status === 0
+						? "Network error — can't reach the editor backend."
+						: `Failed to load config (HTTP ${cfg.status})`
+				});
 				return;
 			}
 			const fresh = cfg.body.yaml ?? "";
