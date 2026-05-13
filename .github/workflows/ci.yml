@@ -12,19 +12,28 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# The editor's tsconfig path alias `@bot/*` points at `../azalea/src/*`,
-# so every job that needs source resolution (typecheck/test/build):
-#   - checks out both repos as siblings under $GITHUB_WORKSPACE
-#   - installs deps in both (the bot's schema.ts imports zod, typed-regex,
-#     discord.js, lodash — they have to resolve for typecheck)
-#   - runs editor commands inside ./azalea-editor.
-defaults:
-  run:
-    working-directory: ./azalea-editor
+# Two classes of job here:
+#
+#   - "bot-aware" (typecheck, test): the editor's `@bot/*` path alias
+#     resolves to `../azalea/src/*`, and the bot's runtime deps (zod,
+#     typed-regex, discord.js, lodash) need to install for TypeScript
+#     and Bun to resolve types and runtime imports. These jobs check
+#     out the bot repo as a sibling.
+#
+#   - "bot-free" (build, audit, actionlint): the UI tsconfig and the
+#     audit/lint commands don't reach into the bot tree. Skipping the
+#     cross-checkout keeps the supply-chain surface of these jobs
+#     small — a compromise in the bot repo can't leak into them.
+#
+# `working-directory: ./azalea-editor` is set per-job (rather than
+# globally) so bot-free jobs can check out at the workspace root.
 
 jobs:
   typecheck:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./azalea-editor
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -34,6 +43,8 @@ jobs:
           repository: Rodis-Infrastructure/Azalea
           path: azalea
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: ./azalea-editor/.bun-version
 
       - name: Install Editor Dependencies
         run: bun install --frozen-lockfile
@@ -45,6 +56,9 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./azalea-editor
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -54,6 +68,8 @@ jobs:
           repository: Rodis-Infrastructure/Azalea
           path: azalea
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: ./azalea-editor/.bun-version
 
       - name: Install Editor Dependencies
         run: bun install --frozen-lockfile
@@ -67,18 +83,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-        with:
-          path: azalea-editor
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-        with:
-          repository: Rodis-Infrastructure/Azalea
-          path: azalea
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: ./.bun-version
 
-      - name: Install Editor Dependencies
-        run: bun install --frozen-lockfile
-      - name: Install Bot Dependencies
-        working-directory: ./azalea
+      - name: Install Dependencies
         run: bun install --frozen-lockfile
       - name: Build UI
         run: bun run build
@@ -87,9 +96,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-        with:
-          path: azalea-editor
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: ./.bun-version
 
       - name: Install Dependencies
         run: bun install --frozen-lockfile

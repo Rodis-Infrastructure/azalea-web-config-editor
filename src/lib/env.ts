@@ -65,6 +65,15 @@ export const env = {
 	 * unset, the panel is hidden from the UI.
 	 */
 	testWebhookUrl: readString("TEST_WEBHOOK_URL"),
+	/**
+	 * Audit log YAML blob retention in days. Every save and restore writes
+	 * the full before/after config into SQLite for forensics; this caps how
+	 * long those blobs live. The audit row itself stays — only the blob
+	 * columns get nulled out — so timelines remain reconstructible by
+	 * hash but the raw content ages out. Defaults to 90 days; set to 0 to
+	 * disable purging entirely.
+	 */
+	auditBlobRetentionDays: readNumber("AUDIT_BLOB_RETENTION_DAYS", 90),
 	// Derive cookie security from the OAuth redirect URI: HTTPS deploys get
 	// `Secure` on every cookie, plain-HTTP local dev does not (otherwise the
 	// browser refuses to send cookies back over the unencrypted callback).

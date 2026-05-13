@@ -39,6 +39,17 @@ authRoutes.get("/callback", async c => {
 	const stateParam = c.req.query("state");
 	const stateCookie = getCookie(c, STATE_COOKIE);
 
+	// Discord-side errors (?error=access_denied, ?error=consent_required,
+	// etc.) come back without a `code`. Surface those distinctly so an
+	// operator who cancelled the prompt isn't told their request was a
+	// CSRF attempt.
+	const discordError = c.req.query("error");
+	if (discordError) {
+		deleteCookie(c, STATE_COOKIE, { path: "/" });
+		const description = c.req.query("error_description") ?? discordError;
+		return c.json({ error: "discord_error", detail: description }, 400);
+	}
+
 	if (!code || !stateParam || !stateCookie || stateParam !== stateCookie) {
 		return c.json({ error: "invalid_state" }, 400);
 	}

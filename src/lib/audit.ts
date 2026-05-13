@@ -99,3 +99,28 @@ export function listAuditEvents(guildId: string, limit = 100): AuditRow[] {
 function sha256(input: string): string {
 	return createHash("sha256").update(input).digest("hex");
 }
+
+/**
+ * Null out the YAML blob columns on audit rows older than
+ * `retentionDays`. The row itself (timestamp, actor, action, hashes,
+ * success) is retained — only the raw config bodies age out, so the
+ * timeline stays reconstructible from hashes without keeping the
+ * potentially sensitive content forever.
+ *
+ * `retentionDays <= 0` disables purging (useful for tests and operators
+ * who archive editor.db elsewhere).
+ */
+export function purgeOldAuditBlobs(retentionDays: number): number {
+	if (retentionDays <= 0) return 0;
+	const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
+	const db = getDb();
+	const result = db.run(
+		`UPDATE audit_events
+			SET before_blob = NULL,
+				after_blob  = NULL
+			WHERE ts < ?
+				AND (before_blob IS NOT NULL OR after_blob IS NOT NULL)`,
+		[cutoff]
+	);
+	return result.changes;
+}

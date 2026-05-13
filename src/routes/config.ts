@@ -68,7 +68,7 @@ configRoutes.post("/", async c => {
 		beforeYaml: before?.yamlText ?? null,
 		afterYaml: success ? body.yaml : null,
 		success,
-		errorMessage: success ? undefined : describeOutcome(outcome)
+		errorMessage: success ? undefined : describeOutcomeForAudit(outcome)
 	});
 
 	if (success) {
@@ -129,7 +129,7 @@ configRoutes.post("/restore", async c => {
 		beforeYaml: before?.yamlText ?? null,
 		afterYaml: outcome.status === "saved" ? yaml : null,
 		success: outcome.status === "saved",
-		errorMessage: outcome.status === "saved" ? undefined : describeOutcome(outcome)
+		errorMessage: outcome.status === "saved" ? undefined : describeOutcomeForAudit(outcome)
 	});
 
 	if (outcome.status === "saved") {
@@ -144,6 +144,8 @@ configRoutes.post("/restore", async c => {
 
 	return c.json(outcome);
 });
+
+const WEBHOOK_FETCH_TIMEOUT_MS = 5_000;
 
 /**
  * Proxy a "test message" through the editor's preview webhook (configured
@@ -175,13 +177,18 @@ configRoutes.post("/test-webhook", async c => {
 		return c.json({ ok: false, error: payload.error }, 400);
 	}
 
-	const res = await fetch(url, {
-		method: "POST",
-		headers: { "content-type": "application/json" },
-		body: JSON.stringify(payload.value)
-	}).catch(err => {
-		throw new Error(`Webhook POST failed: ${err instanceof Error ? err.message : String(err)}`);
-	});
+	let res: Response;
+	try {
+		res = await fetch(url, {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify(payload.value),
+			signal: AbortSignal.timeout(WEBHOOK_FETCH_TIMEOUT_MS)
+		});
+	} catch (err) {
+		const message = err instanceof Error ? err.message : String(err);
+		return c.json({ ok: false, error: `Webhook POST failed: ${message}` }, 502);
+	}
 
 	if (!res.ok) {
 		const text = await res.text().catch(() => "");
@@ -230,9 +237,23 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function describeOutcome(outcome: Awaited<ReturnType<typeof saveGuildConfig>>): string {
+/**
+ * Audit log–safe summary of a save outcome. Specifically NEVER quotes the
+ * underlying YAML parser message, which the `yaml` library generates with
+ * a fragment of the offending input — an operator who pastes a secret
+ * into a malformed draft would otherwise have that fragment persisted
+ * forever in the audit DB.
+ *
+ * Zod-stage errors are safe to keep verbatim: they report paths and
+ * expected-type messages, not the original values.
+ */
+function describeOutcomeForAudit(outcome: Awaited<ReturnType<typeof saveGuildConfig>>): string {
 	switch (outcome.status) {
-		case "validation_failed": return `validation failed: ${outcome.errors.map(e => `${e.path}: ${e.message}`).join("; ")}`;
+		case "validation_failed": {
+			const yamlStage = outcome.errors.some(e => e.path === "");
+			if (yamlStage) return "yaml parse failed";
+			return `schema failed: ${outcome.errors.map(e => `${e.path}: ${e.message}`).join("; ")}`;
+		}
 		case "conflict": return "config changed on disk while editing";
 		case "rolled_back": return `rolled back: ${outcome.reason}`;
 		case "degraded": return `degraded: ${outcome.reason}`;

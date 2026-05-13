@@ -11,6 +11,7 @@ import { env } from "@lib/env";
 
 const DISCORD_API = "https://discord.com/api/v10";
 const CACHE_TTL_MS = 30_000;
+const FETCH_TIMEOUT_MS = 10_000;
 
 interface CacheEntry<T> {
 	expiresAt: number;
@@ -30,7 +31,10 @@ async function discordGet<T>(path: string, cacheKey?: string): Promise<T> {
 		return hit.value as T;
 	}
 
-	const res = await fetch(`${DISCORD_API}${path}`, { headers: botAuthHeaders() });
+	const res = await fetch(`${DISCORD_API}${path}`, {
+		headers: botAuthHeaders(),
+		signal: AbortSignal.timeout(FETCH_TIMEOUT_MS)
+	});
 	if (!res.ok) {
 		const body = await res.text().catch(() => "");
 		throw new DiscordError(res.status, `Discord API ${res.status} for ${path}: ${body}`);
@@ -93,7 +97,8 @@ export function listEmojis(guildId: string): Promise<DiscordEmoji[]> {
  */
 export async function fetchMember(guildId: string, userId: string): Promise<DiscordMember | null> {
 	const res = await fetch(`${DISCORD_API}/guilds/${guildId}/members/${userId}`, {
-		headers: botAuthHeaders()
+		headers: botAuthHeaders(),
+		signal: AbortSignal.timeout(FETCH_TIMEOUT_MS)
 	});
 	if (res.status === 404) return null;
 	if (!res.ok) {

@@ -19,11 +19,14 @@ export interface HealthSnapshot {
 }
 
 const POLL_INTERVAL_MS = 500;
+const HEALTH_FETCH_TIMEOUT_MS = 5_000;
 
 /** Fetches the current health snapshot. Returns null on any failure. */
 export async function fetchHealth(signal?: AbortSignal): Promise<HealthSnapshot | null> {
 	try {
-		const res = await fetch(env.healthUrl, { signal });
+		const res = await fetch(env.healthUrl, {
+			signal: signal ?? AbortSignal.timeout(HEALTH_FETCH_TIMEOUT_MS)
+		});
 		if (!res.ok) return null;
 		return await res.json() as HealthSnapshot;
 	} catch {

@@ -49,12 +49,19 @@ export async function notifyConfigChange(input: ChangeNotification): Promise<voi
 		.catch(() => `\`${input.guildId}\``);
 
 	const isRestore = input.action === "restore";
+	// Username goes into a structured field rather than the description
+	// sentence: an operator's Discord handle can contain backticks,
+	// asterisks, and other markdown-meaningful characters, and embed
+	// descriptions render them. Field values still render markdown, but
+	// the bounded layout means a stray backtick can't bleed into
+	// surrounding text.
 	const payload = {
 		embeds: [{
 			title: isRestore ? "🔄 Config restored" : "✅ Config saved",
 			color: isRestore ? COLOR_RESTORED : COLOR_SAVED,
-			description: `\`${input.username}\` ${isRestore ? "restored" : "saved"} the config for ${guildLabel}.`,
+			description: `${isRestore ? "Restored" : "Saved"} ${guildLabel}.`,
 			fields: [
+				{ name: "Actor", value: input.username, inline: true },
 				{ name: "Before", value: `\`${input.beforeHash ?? "(none)"}\``, inline: true },
 				{ name: "After", value: `\`${input.afterHash}\``, inline: true }
 			],

@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { _setDbForTesting } from "@lib/db";
-import { listAuditEvents, recordAuditEvent } from "@lib/audit";
+import { _setDbForTesting, getDb } from "@lib/db";
+import { listAuditEvents, purgeOldAuditBlobs, recordAuditEvent } from "@lib/audit";
 
 describe("audit log", () => {
 	beforeAll(() => {
@@ -71,5 +71,61 @@ describe("audit log", () => {
 		// Same input → same hash; both populated.
 		expect(events[0]?.beforeHash).toBe(events[0]?.afterHash);
 		expect(events[0]?.beforeHash).toMatch(/^[a-f0-9]{64}$/);
+	});
+
+	test("purgeOldAuditBlobs nulls blobs past the retention window but keeps the row", () => {
+		const db = getDb();
+		// Backdate one row by manipulating ts directly; recordAuditEvent
+		// always stamps Date.now().
+		recordAuditEvent({
+			userId: "555",
+			username: "eve",
+			guildId: "G4",
+			action: "save",
+			beforeYaml: "ancient before",
+			afterYaml: "ancient after",
+			success: true
+		});
+		const ancientTs = Date.now() - 100 * 24 * 60 * 60 * 1000;
+		db.run("UPDATE audit_events SET ts = ? WHERE guild_id = 'G4'", [ancientTs]);
+
+		recordAuditEvent({
+			userId: "666",
+			username: "frank",
+			guildId: "G4",
+			action: "save",
+			beforeYaml: "recent",
+			afterYaml: "recent",
+			success: true
+		});
+
+		const changes = purgeOldAuditBlobs(90);
+		expect(changes).toBe(1);
+
+		// Row count unchanged — only blob columns are nulled.
+		type Row = { id: number; before_blob: string | null; after_blob: string | null };
+		const rows = db
+			.query<Row, [string]>("SELECT id, before_blob, after_blob FROM audit_events WHERE guild_id = ? ORDER BY ts ASC")
+			.all("G4");
+		expect(rows).toHaveLength(2);
+		expect(rows[0]?.before_blob).toBeNull();
+		expect(rows[0]?.after_blob).toBeNull();
+		expect(rows[1]?.before_blob).toBe("recent");
+		expect(rows[1]?.after_blob).toBe("recent");
+	});
+
+	test("purgeOldAuditBlobs is a no-op when retention <= 0", () => {
+		recordAuditEvent({
+			userId: "777",
+			username: "grace",
+			guildId: "G5",
+			action: "save",
+			beforeYaml: "x",
+			afterYaml: "y",
+			success: true
+		});
+
+		expect(purgeOldAuditBlobs(0)).toBe(0);
+		expect(purgeOldAuditBlobs(-7)).toBe(0);
 	});
 });

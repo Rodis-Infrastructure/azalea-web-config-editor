@@ -19,6 +19,11 @@ const DISCORD_USER = "https://discord.com/api/users/@me";
 const DISCORD_USER_GUILDS = "https://discord.com/api/users/@me/guilds";
 const SCOPES = "identify guilds";
 
+// Cap every outbound Discord call so a slow upstream can't pin a Hono
+// worker. Discord's normal response is <500 ms; 10 s is a comfortable
+// ceiling that still surfaces real outages quickly.
+const DISCORD_FETCH_TIMEOUT_MS = 10_000;
+
 export interface DiscordUser {
 	id: string;
 	username: string;
@@ -71,7 +76,8 @@ export async function exchangeCode(code: string): Promise<TokenResponse> {
 	const res = await fetch(DISCORD_TOKEN, {
 		method: "POST",
 		headers: { "content-type": "application/x-www-form-urlencoded" },
-		body
+		body,
+		signal: AbortSignal.timeout(DISCORD_FETCH_TIMEOUT_MS)
 	});
 	if (!res.ok) {
 		const text = await res.text().catch(() => "");
@@ -81,14 +87,20 @@ export async function exchangeCode(code: string): Promise<TokenResponse> {
 }
 
 export async function fetchOAuthUser(accessToken: string): Promise<DiscordUser> {
-	const res = await fetch(DISCORD_USER, { headers: { Authorization: `Bearer ${accessToken}` } });
+	const res = await fetch(DISCORD_USER, {
+		headers: { Authorization: `Bearer ${accessToken}` },
+		signal: AbortSignal.timeout(DISCORD_FETCH_TIMEOUT_MS)
+	});
 	if (!res.ok) throw new Error(`Failed to fetch Discord user (${res.status})`);
 	const user = await res.json() as DiscordUser;
 	return { id: user.id, username: user.username, avatar: user.avatar };
 }
 
 export async function fetchOAuthGuilds(accessToken: string): Promise<UserGuild[]> {
-	const res = await fetch(DISCORD_USER_GUILDS, { headers: { Authorization: `Bearer ${accessToken}` } });
+	const res = await fetch(DISCORD_USER_GUILDS, {
+		headers: { Authorization: `Bearer ${accessToken}` },
+		signal: AbortSignal.timeout(DISCORD_FETCH_TIMEOUT_MS)
+	});
 	if (!res.ok) throw new Error(`Failed to fetch user guilds (${res.status})`);
 	const arr = await res.json() as UserGuild[];
 	return arr.map(g => ({ id: g.id, name: g.name, icon: g.icon }));
