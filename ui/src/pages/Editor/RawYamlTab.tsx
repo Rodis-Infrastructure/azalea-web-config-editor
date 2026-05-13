@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import Editor, { type OnMount } from "@monaco-editor/react";
+import Editor, { DiffEditor, type OnMount, type DiffOnMount } from "@monaco-editor/react";
 import * as YAML from "yaml";
 import { api, type ValidationResult } from "../../lib/api";
 import type { SaveStatus } from "./index";
@@ -7,11 +7,15 @@ import type { SaveStatus } from "./index";
 interface Props {
 	value: string;
 	onChange: (next: string) => void;
+	originalValue: string;
 	parse: ValidationResult | null;
 	guildId: string;
 	testEmbedEnabled: boolean;
 	onStatus: (status: SaveStatus) => void;
+	onEditorReady?: (editor: Parameters<OnMount>[0]) => void;
 }
+
+type Tab = "edit" | "diff";
 
 const THEME_NAME = "azalea-dark";
 
@@ -63,11 +67,15 @@ function ensureTheme(monaco: Parameters<OnMount>[1]): void {
 export function RawYamlTab({
 	value,
 	onChange,
+	originalValue,
 	parse,
 	guildId,
 	testEmbedEnabled,
-	onStatus
+	onStatus,
+	onEditorReady
 }: Props): JSX.Element {
+	const [tab, setTab] = useState<Tab>("edit");
+	const isDirty = value !== originalValue;
 	const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
 	const monacoRef = useRef<Parameters<OnMount>[1] | null>(null);
 	const [mounted, setMounted] = useState(false);
@@ -84,6 +92,16 @@ export function RawYamlTab({
 		monaco.editor.setTheme(THEME_NAME);
 		setMounted(true);
 	};
+
+	// Hand the editor instance to the parent via effect so React StrictMode's
+	// dev-mode double mount (and any HMR remount) re-pushes the live editor
+	// instead of leaving a disposed reference behind.
+	useEffect(() => {
+		if (!mounted) return;
+		const editor = editorRef.current;
+		if (!editor || !onEditorReady) return;
+		onEditorReady(editor);
+	}, [mounted, onEditorReady]);
 
 	// Register Zod errors as Monaco markers. Without per-line locations from
 	// the schema, surface them all at line 1 and rely on the Validation
@@ -114,7 +132,7 @@ export function RawYamlTab({
 		);
 	}, [parse]);
 
-	// CodeLens above each embed-shaped YAML map: "✉ Send test message".
+	// CodeLens above each embed-shaped YAML map: "$(beaker) Send test message".
 	// Clicking re-parses the buffer, resolves anchors/aliases, and POSTs the
 	// expanded embed through the editor's TEST_WEBHOOK_URL.
 	useEffect(() => {
@@ -173,7 +191,7 @@ export function RawYamlTab({
 						id: `azalea-test-embed-${nextId++}`,
 						command: {
 							id: cmdId,
-							title: "✉  Send test message",
+							title: "$(beaker) Send test message",
 							arguments: [{ path: hit.path, line }]
 						}
 					});
@@ -186,32 +204,100 @@ export function RawYamlTab({
 		return () => provider.dispose();
 	}, [mounted, testEmbedEnabled, guildId]);
 
+	const onDiffMount: DiffOnMount = (_editor, monaco) => {
+		ensureTheme(monaco);
+		monaco.editor.setTheme(THEME_NAME);
+	};
+
 	// `h-full` flows from the parent grid cell which is sized via the page's
 	// flex chain. Monaco's automaticLayout watches the container and resizes
 	// accordingly, so the editor truly fills the available space rather than
 	// guessing a viewport-based height.
 	return (
-		<div className="bg-bg-2 border border-border rounded-md overflow-hidden h-full">
-			<Editor
-				height="100%"
-				language="yaml"
-				theme={THEME_NAME}
-				value={value}
-				onChange={v => onChange(v ?? "")}
-				onMount={onMount}
-				options={{
-					tabSize: 2,
-					insertSpaces: false,
-					minimap: { enabled: false },
-					scrollBeyondLastLine: false,
-					fontFamily: "ui-monospace, 'SF Mono', Menlo, monospace",
-					fontSize: 13,
-					automaticLayout: true,
-					padding: { top: 12, bottom: 12 },
-					codeLens: true
-				}}
-			/>
+		<div className="bg-bg-2 border border-border rounded-md overflow-hidden h-full flex flex-col">
+			<div className="flex border-b border-border bg-bg-3 shrink-0">
+				<TabButton active={tab === "edit"} onClick={() => setTab("edit")}>
+					Edit
+				</TabButton>
+				<TabButton active={tab === "diff"} onClick={() => setTab("diff")}>
+					Diff
+					{isDirty && (
+						<span className="ml-1.5 inline-block w-1.5 h-1.5 rounded-full bg-warn align-middle" />
+					)}
+				</TabButton>
+			</div>
+			<div className="flex-1 min-h-0">
+				{tab === "edit" ? (
+					<Editor
+						height="100%"
+						language="yaml"
+						theme={THEME_NAME}
+						value={value}
+						onChange={v => onChange(v ?? "")}
+						onMount={onMount}
+						options={{
+							tabSize: 2,
+							insertSpaces: false,
+							minimap: { enabled: false },
+							scrollBeyondLastLine: false,
+							fontFamily: "ui-monospace, 'SF Mono', Menlo, monospace",
+							fontSize: 13,
+							automaticLayout: true,
+							padding: { top: 12, bottom: 12 },
+							codeLens: true
+						}}
+					/>
+				) : isDirty ? (
+					<DiffEditor
+						height="100%"
+						language="yaml"
+						theme={THEME_NAME}
+						original={originalValue}
+						modified={value}
+						onMount={onDiffMount}
+						options={{
+							readOnly: true,
+							renderSideBySide: false,
+							minimap: { enabled: false },
+							scrollBeyondLastLine: false,
+							fontFamily: "ui-monospace, 'SF Mono', Menlo, monospace",
+							fontSize: 13,
+							automaticLayout: true,
+							padding: { top: 12, bottom: 12 },
+							hideUnchangedRegions: {
+								enabled: true,
+								contextLineCount: 3,
+								minimumLineCount: 3,
+								revealLineCount: 20
+							},
+							renderOverviewRuler: false,
+							diffWordWrap: "off"
+						}}
+					/>
+				) : (
+					<div className="h-full flex items-center justify-center text-xs text-muted px-6 text-center">
+						No changes — the live config matches what's on disk.
+					</div>
+				)}
+			</div>
 		</div>
+	);
+}
+
+function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }): JSX.Element {
+	return (
+		<button
+			type="button"
+			onClick={onClick}
+			className={
+				"px-4 py-2 text-xs font-medium border-b-2 -mb-px cursor-pointer transition-colors " +
+				(active
+					? "border-accent text-fg"
+					: "border-transparent text-muted hover:text-fg")
+			}
+		>
+			{children}
+		</button>
 	);
 }
 

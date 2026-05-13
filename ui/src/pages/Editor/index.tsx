@@ -9,6 +9,8 @@ import { LookupPanel } from "./LookupPanel";
 import { VersionBanner } from "./VersionBanner";
 import { ValidationPanel } from "./ValidationPanel";
 import { StatusLine } from "./StatusLine";
+import { JumpPanel } from "./JumpPanel";
+import type { editor as MonacoEditor } from "monaco-editor";
 
 export interface SaveStatus {
 	tone: "ok" | "warn" | "err" | "info";
@@ -46,6 +48,19 @@ export function EditorPage({ me }: { me: Me }): JSX.Element {
 	}, [guildId]);
 
 	const [lookupRefreshing, setLookupRefreshing] = useState(false);
+	const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
+
+	const handleEditorReady = useCallback((editor: MonacoEditor.IStandaloneCodeEditor) => {
+		editorRef.current = editor;
+	}, []);
+
+	const jumpToLine = useCallback((line: number) => {
+		const editor = editorRef.current;
+		if (!editor) return;
+		editor.focus();
+		editor.setSelection({ startLineNumber: line, startColumn: 1, endLineNumber: line, endColumn: 1 });
+		editor.revealLineInCenter(line);
+	}, []);
 	const refreshLookup = useCallback(async () => {
 		setLookupRefreshing(true);
 		const [c, r] = await Promise.all([
@@ -230,10 +245,12 @@ export function EditorPage({ me }: { me: Me }): JSX.Element {
 					<RawYamlTab
 						value={yaml}
 						onChange={setYaml}
+						originalValue={originalYaml}
 						parse={parse}
 						guildId={guildId}
 						testEmbedEnabled={me.testWebhookConfigured}
 						onStatus={setStatus}
+						onEditorReady={handleEditorReady}
 					/>
 				</div>
 
@@ -243,6 +260,9 @@ export function EditorPage({ me }: { me: Me }): JSX.Element {
 					</Panel>
 					<Panel title="Validation">
 						<ValidationPanel parse={parse} />
+					</Panel>
+					<Panel title="Jump to">
+						<JumpPanel yaml={yaml} onJump={jumpToLine} />
 					</Panel>
 					<Panel
 						title="Server lookup"
@@ -273,14 +293,58 @@ export function EditorPage({ me }: { me: Me }): JSX.Element {
 	);
 }
 
+const PANEL_COLLAPSED_KEY = "azalea-editor:collapsed-panels";
+
+function readCollapsedSet(): Set<string> {
+	try {
+		const raw = localStorage.getItem(PANEL_COLLAPSED_KEY);
+		if (!raw) return new Set();
+		const arr = JSON.parse(raw);
+		return Array.isArray(arr) ? new Set(arr.filter((s): s is string => typeof s === "string")) : new Set();
+	} catch {
+		return new Set();
+	}
+}
+
 function Panel({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }): JSX.Element {
+	const [collapsed, setCollapsed] = useState(() => readCollapsedSet().has(title));
+
+	const toggle = (): void => {
+		setCollapsed(prev => {
+			const next = !prev;
+			const set = readCollapsedSet();
+			if (next) set.add(title); else set.delete(title);
+			try { localStorage.setItem(PANEL_COLLAPSED_KEY, JSON.stringify([...set])); } catch { /* ignore */ }
+			return next;
+		});
+	};
+
 	return (
 		<section className="bg-bg-2 border border-border rounded-md p-3">
-			<div className="flex items-center justify-between mb-2">
-				<h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted">{title}</h3>
-				{action}
+			<div className={"flex items-center justify-between" + (collapsed ? "" : " mb-2")}>
+				<button
+					type="button"
+					onClick={toggle}
+					className="flex items-center gap-1.5 group cursor-pointer"
+					aria-expanded={!collapsed}
+				>
+					<svg
+						width="9"
+						height="9"
+						viewBox="0 0 10 10"
+						className={
+							"text-muted group-hover:text-fg transition-transform " +
+							(collapsed ? "-rotate-90" : "")
+						}
+						aria-hidden
+					>
+						<path d="M1 3.5L5 7L9 3.5" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+					</svg>
+					<h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted group-hover:text-fg">{title}</h3>
+				</button>
+				{!collapsed && action}
 			</div>
-			{children}
+			{!collapsed && children}
 		</section>
 	);
 }
