@@ -59,7 +59,9 @@ export function WebhookBuilder({ me }: { me: Me }): JSX.Element {
 		monaco.editor.setTheme(THEME_NAME);
 	};
 
-	const buildPayload = (): { ok: true; payload: Record<string, unknown> } | { ok: false; error: string } => {
+	const buildPayload = (
+		{ asEdit }: { asEdit: boolean }
+	): { ok: true; payload: Record<string, unknown> } | { ok: false; error: string } => {
 		if (parsedEmbeds.error) {
 			return { ok: false, error: parsedEmbeds.error };
 		}
@@ -67,8 +69,8 @@ export function WebhookBuilder({ me }: { me: Me }): JSX.Element {
 		if (content.trim() !== "") payload.content = content;
 		if (parsedEmbeds.value.length > 0) payload.embeds = parsedEmbeds.value;
 
-		if (!editing) {
-			// Identity overrides only allowed on create.
+		if (!asEdit) {
+			// Identity overrides are only allowed on create.
 			if (username.trim() !== "") payload.username = username.trim();
 			if (avatarUrl.trim() !== "") payload.avatar_url = avatarUrl.trim();
 		}
@@ -93,7 +95,12 @@ export function WebhookBuilder({ me }: { me: Me }): JSX.Element {
 			return;
 		}
 
-		const build = buildPayload();
+		// The test button always sends a brand-new message — message ID
+		// and thread ID belong to whatever channel `webhookUrl` points at,
+		// not to TEST_WEBHOOK_URL, so propagating them would 404.
+		const isEdit = target === "custom" && editing;
+
+		const build = buildPayload({ asEdit: isEdit });
 		if (!build.ok) {
 			setStatus({ tone: "err", message: build.error });
 			return;
@@ -105,8 +112,8 @@ export function WebhookBuilder({ me }: { me: Me }): JSX.Element {
 			body: JSON.stringify({
 				target,
 				webhookUrl: target === "custom" ? webhookUrl.trim() : undefined,
-				messageId: editing ? messageId.trim() : undefined,
-				threadId: threadId.trim() || undefined,
+				messageId: isEdit ? messageId.trim() : undefined,
+				threadId: target === "custom" ? (threadId.trim() || undefined) : undefined,
 				payload: build.payload
 			})
 		});
@@ -130,7 +137,7 @@ export function WebhookBuilder({ me }: { me: Me }): JSX.Element {
 		const message = isMessageObject(proxy.body.body) ? proxy.body.body : null;
 		setLastResponse(message);
 
-		if (editing) {
+		if (isEdit) {
 			setStatus({
 				tone: "ok",
 				message: `Edited message ${messageId.trim()}.`
@@ -204,7 +211,11 @@ export function WebhookBuilder({ me }: { me: Me }): JSX.Element {
 					type="button"
 					onClick={() => void fireProxy("test")}
 					disabled={sending || !isTestConfigured}
-					title={isTestConfigured ? "Sends to TEST_WEBHOOK_URL with the current form" : "TEST_WEBHOOK_URL is not configured on the server"}
+					title={
+						isTestConfigured
+							? "Always sends a new message to TEST_WEBHOOK_URL (message/thread IDs are ignored)."
+							: "TEST_WEBHOOK_URL is not configured on the server"
+					}
 					className="text-sm border border-border rounded px-3.5 py-1.5 bg-bg-3 hover:bg-bg-2 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
 				>
 					{sending ? "…" : "Send test"}
